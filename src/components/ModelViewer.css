@@ -1,153 +1,219 @@
-/* ModelViewer.css - Static Small Popup Style */
-
-/* Main Container - Fixed Popup */
-.model-viewer-container {
-    position: fixed;
-    bottom: 90px;
-    /* Adjust based on controls height */
+.model-viewer-overlay {
+    position: absolute;
+    bottom: 100px;
     right: 20px;
-    width: 250px;
-    height: 320px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 16px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(102, 126, 234, 0.4);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
     z-index: 1000;
-    animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    border: 2px solid rgba(255, 255, 255, 0.1);
+    animation: slideIn 0.3s ease-out;
 }
 
-@keyframes popIn {
+@keyframes slideIn {
     from {
-        transform: scale(0.8) translateY(20px);
         opacity: 0;
+        transform: translateY(20px);
     }
 
     to {
-        transform: scale(1) translateY(0);
         opacity: 1;
+        transform: translateY(0);
     }
 }
 
-/* Close Button - Small & Top Right */
-.model-viewer-close {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 28px;
-    height: 28px;
-    background: rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+.ai-translator-card {
+    width: 300px;
+    background: #0f111a;
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+}
+
+/* Header */
+.card-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.header-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    background-color: #00ff88;
     border-radius: 50%;
+    box-shadow: 0 0 8px #00ff88;
+}
+
+.header-title {
+    color: #a0a0b0;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+.close-button {
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    color: #666;
     cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10;
-    transition: all 0.2s ease;
-    padding: 0;
+    transition: all 0.2s;
 }
 
-.model-viewer-close:hover {
-    background: rgba(255, 0, 0, 0.8);
-    transform: scale(1.1);
+.close-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
 }
 
-/* Canvas Wrapper */
-.model-viewer-canvas-wrapper {
-    flex: 1;
-    width: 100%;
+/* Avatar Frame */
+.avatar-container {
     position: relative;
-    background: #1a1a2e;
-    overflow: hidden;
-    border-radius: 14px;
-    margin: 2px;
+    width: 200px;
+    height: 250px;
+    margin-bottom: 25px;
 }
 
-/* Loading Spinner - Compact */
-.loading-spinner {
+.avatar-circle {
+    width: 100%;
+    height: 100%;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    position: relative;
+    overflow: hidden;
+    border: 2px solid rgba(74, 144, 226, 0.3);
+    box-shadow: 0 0 20px rgba(74, 144, 226, 0.1);
+}
+
+.avatar-shadow {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    height: 20px;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0) 70%);
+    border-radius: 50%;
+    z-index: -1;
+}
+
+/* Controls */
+.controls-section {
+    width: 100%;
+    text-align: center;
+}
+
+.status-message {
+    color: #888;
+    font-size: 12px;
+    margin-bottom: 15px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+}
+
+.action-btn {
+    flex: 1;
+    height: 80px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: transform 0.2s, filter 0.2s;
+}
+
+.action-btn:active {
+    transform: scale(0.98);
+}
+
+.speech-btn {
+    background: #00b894;
+    color: white;
+}
+
+.speech-btn.active {
+    box-shadow: 0 0 15px rgba(0, 184, 148, 0.4);
+}
+
+.isl-btn {
+    background: #6c5ce7;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.isl-btn.active {
+    box-shadow: 0 0 15px rgba(108, 92, 231, 0.4);
+}
+
+.btn-text {
+    font-weight: 600;
+    font-size: 14px;
+    text-align: left;
+    line-height: 1.2;
+}
+
+.hand-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Spinner */
+.avatar-loading {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.spinner {
     width: 30px;
     height: 30px;
-    border: 3px solid rgba(255, 255, 255, 0.2);
-    border-top: 3px solid white;
+    border: 3px solid rgba(255, 255, 255, 0.1);
     border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 10px;
+    border-top-color: #4a90e2;
+    animation: spin 1s ease-in-out infinite;
 }
 
 @keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-
-    100% {
+    to {
         transform: rotate(360deg);
     }
 }
 
-/* Current Sign Display - Floating Chip */
-.current-sign-display {
-    position: absolute;
-    bottom: 15px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(8px);
-    padding: 6px 16px;
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    animation: slideUpFade 0.3s ease-out;
-    width: max-content;
-    max-width: 90%;
-}
-
-@keyframes slideUpFade {
-    from {
-        transform: translateX(-50%) translateY(10px);
-        opacity: 0;
-    }
-
-    to {
-        transform: translateX(-50%) translateY(0);
-        opacity: 1;
-    }
-}
-
-.sign-text {
-    color: white;
-    font-size: 14px;
-    font-weight: 600;
-    text-transform: capitalize;
-    letter-spacing: 0.5px;
-}
-
-/* Responsive adjustments */
+/* Responsive */
 @media (max-width: 768px) {
-    .model-viewer-container {
-        width: 140px;
-        height: 180px;
+    .model-viewer-overlay {
+        right: 50%;
+        transform: translateX(50%);
         bottom: 80px;
-        right: 15px;
-        border-radius: 12px;
     }
 
-    .model-viewer-close {
-        width: 24px;
-        height: 24px;
-    }
-
-    .sign-text {
-        font-size: 12px;
-    }
-
-    .current-sign-display {
-        padding: 4px 10px;
-        bottom: 10px;
+    .ai-translator-card {
+        width: 280px;
     }
 }

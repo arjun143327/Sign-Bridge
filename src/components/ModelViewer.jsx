@@ -17,10 +17,10 @@ function AvatarModel({ modelPath, currentSign }) {
             const center = box.getCenter(new THREE.Vector3());
             scene.position.sub(center);
 
-            // Scale to fit
+            // Scale to fit - slightly larger for the circle view
             const size = box.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z);
-            const scale = 2.5 / maxDim;
+            const scale = 2.2 / maxDim;
             scene.scale.setScalar(scale);
         }
 
@@ -73,14 +73,14 @@ function AvatarModel({ modelPath, currentSign }) {
             mixer.current.update(delta);
         }
 
-        // Gentle rotation
-        if (group.current) {
-            group.current.rotation.y += delta * 0.1;
-        }
+        // Gentle rotation - removed for the card view to keep it steady forward
+        // if (group.current) {
+        //     group.current.rotation.y += delta * 0.1;
+        // }
     });
 
     return (
-        <group ref={group} position={[0, -1, 0]}>
+        <group ref={group} position={[0, -1.8, 0]}>
             <primitive object={scene} />
         </group>
     );
@@ -90,63 +90,24 @@ function AvatarModel({ modelPath, currentSign }) {
 function LoadingSpinner() {
     return (
         <Html center>
-            <div style={{
-                color: 'white',
-                fontSize: '18px',
-                textAlign: 'center',
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center'
-            }}>
-                <div className="loading-spinner"></div>
-                <p style={{ marginTop: '20px', whiteSpace: 'nowrap' }}>Loading Avatar...</p>
+            <div className="avatar-loading">
+                <div className="spinner"></div>
             </div>
         </Html>
     );
 }
 
-// Error Component
-function ErrorDisplay({ error, onClose }) {
-    return (
-        <div style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            color: 'white',
-            textAlign: 'center',
-            padding: '40px',
-            background: 'rgba(255, 0, 0, 0.1)',
-            borderRadius: '10px',
-            border: '2px solid rgba(255, 0, 0, 0.3)'
-        }}>
-            <h3 style={{ marginBottom: '15px' }}>Failed to Load Avatar</h3>
-            <p style={{ marginBottom: '20px', opacity: 0.8 }}>
-                {error || 'Please check if avatar.glb exists in the public folder'}
-            </p>
-            <button
-                onClick={onClose}
-                style={{
-                    padding: '10px 20px',
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    border: 'none',
-                    borderRadius: '5px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '16px'
-                }}
-            >
-                Close
-            </button>
-        </div>
-    );
-}
-
 // Main ModelViewer Component
-export default function ModelViewer({ isOpen, onClose, modelPath = '/avatar.glb', currentSign = null }) {
+export default function ModelViewer({
+    isOpen,
+    onClose,
+    modelPath = '/avatar.glb',
+    currentSign = null,
+    isCaptionsOn,
+    onToggleCaptions
+}) {
     const [loadError, setLoadError] = useState(null);
+    const [islMode, setIslMode] = useState(true); // Default to ISL active since this is the translator
 
     // Reset error when modal opens
     useEffect(() => {
@@ -158,72 +119,77 @@ export default function ModelViewer({ isOpen, onClose, modelPath = '/avatar.glb'
     if (!isOpen) return null;
 
     return (
-        <div className="model-viewer-container" onClick={(e) => e.stopPropagation()}>
+        <div className="model-viewer-overlay">
+            <div className="ai-translator-card">
+                {/* Header */}
+                <div className="card-header">
+                    <div className="header-status">
+                        <span className="status-dot active"></span>
+                        <span className="header-title">AI TRANSLATOR</span>
+                    </div>
+                    <button className="close-button" onClick={onClose}>
+                        <svg viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                        </svg>
+                    </button>
+                </div>
 
-            {/* Close Button - simplified for small view */}
-            <button className="model-viewer-close" onClick={onClose} aria-label="Close">
-                <svg viewBox="0 0 24 24" fill="white" width="20" height="20">
-                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                </svg>
-            </button>
-
-            {/* 3D Canvas Area */}
-            <div className="model-viewer-canvas-wrapper">
-                {loadError ? (
-                    <ErrorDisplay error={loadError} onClose={onClose} />
-                ) : (
-                    <>
-                        <Canvas
-                            camera={{ position: [0, 0.5, 3.5], fov: 45 }}
-                            style={{ background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)' }}
-                            onError={(error) => {
-                                console.error('Canvas Error:', error);
-                                setLoadError('Canvas rendering failed');
-                            }}
-                            gl={{
-                                antialias: true,
-                                alpha: false,
-                                preserveDrawingBuffer: true
-                            }}
-                        >
-                            <Suspense fallback={<LoadingSpinner />}>
-                                {/* Lighting */}
-                                <ambientLight intensity={0.7} />
-                                <directionalLight
-                                    position={[2, 2, 5]}
-                                    intensity={1.2}
-                                    castShadow
-                                />
-                                <pointLight position={[-2, 1, -2]} intensity={0.5} color="#4a90e2" />
-
-                                {/* Avatar Model */}
-                                <AvatarModel modelPath={modelPath} currentSign={currentSign} />
-
-                                {/* Camera Controls - Locked */}
-                                <OrbitControls
-                                    enableZoom={false}
-                                    enablePan={false}
-                                    enableRotate={false}
-                                    target={[0, 0, 0]}
-                                />
-
-                                {/* Environment Lighting */}
-                                <Environment preset="city" />
-                            </Suspense>
-                        </Canvas>
-
-                        {/* Current Sign Display - Compact */}
-                        {currentSign && (
-                            <div className="current-sign-display">
-                                <span className="sign-text">{currentSign}</span>
+                {/* Avatar Circle */}
+                <div className="avatar-container">
+                    <div className="avatar-circle">
+                        {loadError ? (
+                            <div className="avatar-error">
+                                <p>Failed to load</p>
                             </div>
+                        ) : (
+                            <Canvas
+                                camera={{ position: [0, 0, 4], fov: 45 }}
+                                onError={(error) => {
+                                    console.error('Canvas Error:', error);
+                                    setLoadError('Canvas rendering failed');
+                                }}
+                            >
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <ambientLight intensity={0.8} />
+                                    <directionalLight position={[2, 2, 5]} intensity={1.5} />
+                                    <pointLight position={[-2, 1, -2]} intensity={0.5} color="#4a90e2" />
+                                    <AvatarModel modelPath={modelPath} currentSign={currentSign} />
+                                    <Environment preset="city" />
+                                </Suspense>
+                            </Canvas>
                         )}
-                    </>
-                )}
+                    </div>
+
+                    {/* Shadow effect under the circle */}
+                    <div className="avatar-shadow"></div>
+                </div>
+
+                {/* Controls Section */}
+                <div className="controls-section">
+                    <p className="status-message">Ready to start</p>
+
+                    <div className="action-buttons">
+                        <button
+                            className={`action-btn speech-btn ${isCaptionsOn ? 'active' : ''}`}
+                            onClick={onToggleCaptions}
+                        >
+                            <span className="btn-text">Speech</span>
+                        </button>
+
+                        <button
+                            className={`action-btn isl-btn ${islMode ? 'active' : ''}`}
+                            onClick={() => setIslMode(!islMode)}
+                        >
+                            <div className="hand-icon">
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                                    <path d="M21 5.5c0-.83-.67-1.5-1.5-1.5S18 4.67 18 5.5v-3c0-.83-.67-1.5-1.5-1.5S15 1.67 15 2.5V5h-1V2.5c0-.83-.67-1.5-1.5-1.5S11 1.67 11 2.5v4.61c-.35-.07-.7-.11-1.06-.11-2.9 0-5.51 1.94-6.31 4.69l-.3 1.05c-.17.6.27 1.2.89 1.25.56.05 1.06-.34 1.18-.89l.34-1.63c.46-2.22 2.75-3.08 4.26-2.58V14c0 3.31 2.69 6 6 6s6-2.69 6-6V5.5z" />
+                                </svg>
+                            </div>
+                            <span className="btn-text">ISL<br />Sign</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     );
 }
-
-// Note: Preloading disabled to avoid module initialization errors
-// If needed, preload can be called within a component useEffect
