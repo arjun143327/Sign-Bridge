@@ -5,9 +5,12 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const [isCameraOn, setIsCameraOn] = useState(true)
     const [isMicOn, setIsMicOn] = useState(true)
     const [isScreenSharing, setIsScreenSharing] = useState(false)
+    const [isCaptionsOn, setIsCaptionsOn] = useState(false)
+    const [transcript, setTranscript] = useState('')
     const localVideoRef = useRef(null)
     const remoteVideoRef = useRef(null)
     const localStreamRef = useRef(null)
+    const timeoutRef = useRef(null)
 
     useEffect(() => {
         // Initialize local video stream
@@ -20,6 +23,82 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             }
         }
     }, [])
+
+    useEffect(() => {
+        let recognition = null;
+
+        if (isCaptionsOn) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = 'en-US';
+
+                recognition.onresult = (event) => {
+                    try {
+                        const resultsLength = event.results.length;
+                        if (resultsLength > 0) {
+                            const latestResult = event.results[resultsLength - 1];
+                            if (latestResult && latestResult[0]) {
+                                const text = latestResult[0].transcript;
+                                setTranscript(`You: ${text}`);
+
+                                // Clear existing timeout
+                                if (timeoutRef.current) {
+                                    clearTimeout(timeoutRef.current);
+                                }
+
+                                // Set silence timeout
+                                timeoutRef.current = setTimeout(() => {
+                                    setTranscript('');
+                                }, 3000);
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error processing speech result:', err);
+                    }
+                };
+
+                recognition.onend = () => {
+                    // Automatically restart if it stops unexpectedly
+                    if (isCaptionsOn && recognition) {
+                        try {
+                            recognition.start();
+                        } catch (e) {
+                            // Ignore start errors (e.g. if already started)
+                        }
+                    }
+                };
+
+                recognition.onerror = (event) => {
+                    if (event.error === 'not-allowed') {
+                        setIsCaptionsOn(false);
+                        alert('Microphone access denied.');
+                    }
+                };
+
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error('Failed to start recognition:', e);
+                }
+            } else {
+                alert('Speech recognition not supported.');
+                setIsCaptionsOn(false);
+            }
+        }
+
+        return () => {
+            if (recognition) {
+                recognition.onend = null; // Prevent restart loop on cleanup
+                recognition.stop();
+            }
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+            }
+        }
+    }, [isCaptionsOn])
 
     const startLocalVideo = async () => {
         try {
@@ -76,6 +155,11 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
         }
     }
 
+    const toggleCaptions = () => {
+        setIsCaptionsOn(!isCaptionsOn);
+        if (!isCaptionsOn) setTranscript('');
+    }
+
     const handleEndCall = () => {
         if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => track.stop())
@@ -99,6 +183,12 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                         </div>
                     </div>
                 </div>
+
+                {isCaptionsOn && transcript && (
+                    <div className="captions-overlay">
+                        <div className="captions-text">{transcript}</div>
+                    </div>
+                )}
 
                 <div className="controls">
                     <button
@@ -136,6 +226,16 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     >
                         <svg viewBox="0 0 24 24" fill="currentColor">
                             <path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.11-.9-2-2-2H4c-1.11 0-2 .89-2 2v10c0 1.1.89 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z" />
+                        </svg>
+                    </button>
+
+                    <button
+                        className={`control-button ${isCaptionsOn ? 'active' : ''}`}
+                        onClick={toggleCaptions}
+                        title={isCaptionsOn ? 'Turn off captions' : 'Turn on captions'}
+                    >
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z" />
                         </svg>
                     </button>
 
