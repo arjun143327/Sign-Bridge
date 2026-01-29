@@ -101,13 +101,27 @@ function LoadingSpinner() {
 export default function ModelViewer({
     isOpen,
     onClose,
-    modelPath = '/avatar.glb',
+    modelPath = '/ISL_hello2.glb', // Default base model
     currentSign = null,
     isCaptionsOn,
-    onToggleCaptions
+    onToggleCaptions,
+    transcript
 }) {
     const [loadError, setLoadError] = useState(null);
-    const [islMode, setIslMode] = useState(true); // Default to ISL active since this is the translator
+    const [islMode, setIslMode] = useState(true);
+
+    // Map signs to specific GLB files
+    // If a sign is not in this map, it will use the default modelPath (which should probably be idle loop)
+    const signModelMap = {
+        'Thank You': '/ISL_thankyou.glb',
+        'Hello': '/ISL_hello2.glb',
+        // Add more mappings as files become available
+    };
+
+    // Determine which model to load
+    const activeModelPath = (currentSign && signModelMap[currentSign])
+        ? signModelMap[currentSign]
+        : modelPath;
 
     // Reset error when modal opens
     useEffect(() => {
@@ -116,10 +130,13 @@ export default function ModelViewer({
         }
     }, [isOpen]);
 
-    // Preload the model
+    // Preload the active model
     useEffect(() => {
-        useGLTF.preload(modelPath);
-    }, [modelPath]);
+        useGLTF.preload(activeModelPath);
+        // Preload Thank You as well to avoid lag
+        useGLTF.preload('/ISL_thankyou.glb');
+        useGLTF.preload('/ISL_hello2.glb');
+    }, [activeModelPath]);
 
     return (
         <div className={`model-viewer-overlay ${!isOpen ? 'hidden' : ''}`}>
@@ -156,7 +173,7 @@ export default function ModelViewer({
                                     <ambientLight intensity={0.8} />
                                     <directionalLight position={[2, 2, 5]} intensity={1.5} />
                                     <pointLight position={[-2, 1, -2]} intensity={0.5} color="#4a90e2" />
-                                    <AvatarModel modelPath={modelPath} currentSign={currentSign} />
+                                    <AvatarModel modelPath={activeModelPath} currentSign={currentSign} />
                                     <Environment preset="city" />
                                 </Suspense>
                             </Canvas>
@@ -169,7 +186,9 @@ export default function ModelViewer({
 
                 {/* Controls Section */}
                 <div className="controls-section">
-                    <p className="status-message">Ready to start</p>
+                    <p className="status-message">
+                        {isCaptionsOn ? (transcript || 'Listening...') : 'Ready to start'}
+                    </p>
 
                     <div className="action-buttons">
                         <button
