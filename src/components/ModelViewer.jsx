@@ -158,105 +158,68 @@ export default function ModelViewer({ isOpen, onClose, modelPath = '/avatar.glb'
     if (!isOpen) return null;
 
     return (
-        <div className="model-viewer-overlay" onClick={onClose}>
-            <div className="model-viewer-container" onClick={(e) => e.stopPropagation()}>
+        <div className="model-viewer-container" onClick={(e) => e.stopPropagation()}>
 
-                {/* Close Button */}
-                <button className="model-viewer-close" onClick={onClose} aria-label="Close">
-                    <svg viewBox="0 0 24 24" fill="white" width="28" height="28">
-                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                    </svg>
-                </button>
+            {/* Close Button - simplified for small view */}
+            <button className="model-viewer-close" onClick={onClose} aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="white" width="20" height="20">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                </svg>
+            </button>
 
-                {/* Header */}
-                <div className="model-viewer-header">
-                    <h2>AI Sign Language Assistant</h2>
-                    <p>Interact with your 3D Avatar</p>
-                </div>
+            {/* 3D Canvas Area */}
+            <div className="model-viewer-canvas-wrapper">
+                {loadError ? (
+                    <ErrorDisplay error={loadError} onClose={onClose} />
+                ) : (
+                    <>
+                        <Canvas
+                            camera={{ position: [0, 0.5, 3.5], fov: 45 }}
+                            style={{ background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)' }}
+                            onError={(error) => {
+                                console.error('Canvas Error:', error);
+                                setLoadError('Canvas rendering failed');
+                            }}
+                            gl={{
+                                antialias: true,
+                                alpha: false,
+                                preserveDrawingBuffer: true
+                            }}
+                        >
+                            <Suspense fallback={<LoadingSpinner />}>
+                                {/* Lighting */}
+                                <ambientLight intensity={0.7} />
+                                <directionalLight
+                                    position={[2, 2, 5]}
+                                    intensity={1.2}
+                                    castShadow
+                                />
+                                <pointLight position={[-2, 1, -2]} intensity={0.5} color="#4a90e2" />
 
-                {/* 3D Canvas Area */}
-                <div className="model-viewer-canvas-wrapper">
-                    {loadError ? (
-                        <ErrorDisplay error={loadError} onClose={onClose} />
-                    ) : (
-                        <>
-                            <Canvas
-                                camera={{ position: [0, 0.5, 4], fov: 50 }}
-                                style={{ background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)' }}
-                                onError={(error) => {
-                                    console.error('Canvas Error:', error);
-                                    setLoadError('Canvas rendering failed');
-                                }}
-                                gl={{
-                                    antialias: true,
-                                    alpha: false,
-                                    preserveDrawingBuffer: true
-                                }}
-                            >
-                                <Suspense fallback={<LoadingSpinner />}>
-                                    {/* Lighting */}
-                                    <ambientLight intensity={0.6} />
-                                    <directionalLight
-                                        position={[5, 5, 5]}
-                                        intensity={1.2}
-                                        castShadow
-                                    />
-                                    <pointLight position={[-5, 3, -5]} intensity={0.5} color="#4a90e2" />
-                                    <spotLight
-                                        position={[0, 10, 0]}
-                                        angle={0.3}
-                                        penumbra={1}
-                                        intensity={0.8}
-                                        castShadow
-                                    />
+                                {/* Avatar Model */}
+                                <AvatarModel modelPath={modelPath} currentSign={currentSign} />
 
-                                    {/* Avatar Model */}
-                                    <AvatarModel modelPath={modelPath} currentSign={currentSign} />
+                                {/* Camera Controls - Locked */}
+                                <OrbitControls
+                                    enableZoom={false}
+                                    enablePan={false}
+                                    enableRotate={false}
+                                    target={[0, 0, 0]}
+                                />
 
-                                    {/* Camera Controls */}
-                                    <OrbitControls
-                                        enableZoom={true}
-                                        enablePan={false}
-                                        minDistance={2}
-                                        maxDistance={8}
-                                        maxPolarAngle={Math.PI / 1.8}
-                                        minPolarAngle={Math.PI / 4}
-                                        autoRotate={false}
-                                        autoRotateSpeed={0.5}
-                                    />
+                                {/* Environment Lighting */}
+                                <Environment preset="city" />
+                            </Suspense>
+                        </Canvas>
 
-                                    {/* Environment Lighting */}
-                                    <Environment preset="sunset" />
-                                </Suspense>
-                            </Canvas>
-
-                            {/* Current Sign Display */}
-                            {currentSign && (
-                                <div className="current-sign-display">
-                                    <span className="sign-label">Detected Sign:</span>
-                                    <span className="sign-text">{currentSign}</span>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
-
-                {/* Footer Instructions */}
-                <div className="model-viewer-footer">
-                    <div className="instruction-item">
-                        <span className="instruction-icon">🖱️</span>
-                        <span>Drag to Rotate</span>
-                    </div>
-                    <div className="instruction-item">
-                        <span className="instruction-icon">🔍</span>
-                        <span>Scroll to Zoom</span>
-                    </div>
-                    <div className="instruction-item">
-                        <span className="instruction-icon">👋</span>
-                        <span>ISL Signs Animated</span>
-                    </div>
-                </div>
-
+                        {/* Current Sign Display - Compact */}
+                        {currentSign && (
+                            <div className="current-sign-display">
+                                <span className="sign-text">{currentSign}</span>
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
         </div>
     );
