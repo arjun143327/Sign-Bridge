@@ -12,9 +12,35 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const [isCaptionsOn, setIsCaptionsOn] = useState(false)
     const [transcript, setTranscript] = useState('')
     const [isModelViewerOpen, setIsModelViewerOpen] = useState(false)
-    const [detectedSign, setDetectedSign] = useState(null) // For ISL detection
+    const [currentModelPath, setCurrentModelPath] = useState('/ISL_hello2.glb')
+    const [detectedSign, setDetectedSign] = useState(null)
     const [isModelLoaded, setIsModelLoaded] = useState(false)
     const localVideoRef = useRef(null)
+
+    // Simple ISL sign detection from speech (you can replace this with actual hand detection)
+    const detectSignFromSpeech = (text) => {
+        const lowerText = text.toLowerCase();
+        const signKeywords = {
+            'hello': { sign: 'Hello', model: '/ISL_hello2.glb' },
+            'hi': { sign: 'Hello', model: '/ISL_hello2.glb' },
+            'welcome': { sign: 'Welcome', model: '/ISL_welcome.glb' },
+            'to': { sign: 'To', model: '/ISL_to.glb' },
+            'our': { sign: 'Our', model: '/ISL_our2.glb' },
+            'team': { sign: 'Team', model: '/ISL_team2.glb' },
+            'thank you': { sign: 'Thank You', model: '/ISL_thankyou.glb' },
+            'thanks': { sign: 'Thank You', model: '/ISL_thankyou.glb' },
+        };
+
+        for (const [keyword, data] of Object.entries(signKeywords)) {
+            if (lowerText.includes(keyword)) {
+                if (data.model) {
+                    setCurrentModelPath(data.model);
+                }
+                setDetectedSign(data.sign);
+                break;
+            }
+        }
+    };
     const remoteVideoRef = useRef(null)
     const localStreamRef = useRef(null)
     const timeoutRef = useRef(null)
@@ -198,34 +224,8 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
         }
     }, [isCaptionsOn])
 
-    // Simple ISL sign detection from speech (you can replace this with actual hand detection)
-    const detectSignFromSpeech = (text) => {
-        const lowerText = text.toLowerCase();
-        const signKeywords = {
-            'hello': 'Hello',
-            'hi': 'Hello',
-            'thank you': 'Thank You',
-            'thanks': 'Thank You',
-            'yes': 'Yes',
-            'yeah': 'Yes',
-            'no': 'No',
-            'nope': 'No',
-            'please': 'Please',
-            'help': 'Help',
-            'sorry': 'Sorry',
-            'good': 'Good',
-            'bad': 'Bad',
-            'happy': 'Happy',
-            'sad': 'Sad'
-        };
+    // Old detectSignFromSpeech function removed in favor of the enhanced version above
 
-        for (const [keyword, sign] of Object.entries(signKeywords)) {
-            if (lowerText.includes(keyword)) {
-                setDetectedSign(sign);
-                break;
-            }
-        }
-    };
 
     const startLocalVideo = async () => {
         try {
@@ -394,7 +394,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             <ModelViewer
                 isOpen={isModelViewerOpen}
                 onClose={() => setIsModelViewerOpen(false)}
-                modelPath="/ISL_hello2.glb"
+                modelPath={currentModelPath}
                 currentSign={detectedSign}
                 isCaptionsOn={isCaptionsOn}
                 onToggleCaptions={toggleCaptions}

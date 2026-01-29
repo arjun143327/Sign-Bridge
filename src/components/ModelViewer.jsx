@@ -9,19 +9,33 @@ function AvatarModel({ modelPath, currentSign }) {
     const group = useRef();
     const { scene, animations } = useGLTF(modelPath);
     const mixer = useRef();
+    const lockedPosition = useRef(new THREE.Vector3());
+    const lockedScale = useRef(new THREE.Vector3());
+    const isInitialized = useRef(false);
 
     useEffect(() => {
         if (scene) {
-            // Center the model
-            const box = new THREE.Box3().setFromObject(scene);
-            const center = box.getCenter(new THREE.Vector3());
-            scene.position.sub(center);
+            if (!isInitialized.current) {
+                // Calculate position and scale ONLY for the very first model
+                const box = new THREE.Box3().setFromObject(scene);
+                const center = box.getCenter(new THREE.Vector3());
+                scene.position.sub(center);
 
-            // Scale to fit - slightly larger for the circle view
-            const size = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const scale = 2.2 / maxDim;
-            scene.scale.setScalar(scale);
+                // Scale to fit - slightly larger for the circle view
+                const size = box.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 2.2 / maxDim;
+                scene.scale.setScalar(scale);
+
+                // Lock the position and scale permanently for ALL models
+                lockedPosition.current.copy(scene.position);
+                lockedScale.current.copy(scene.scale);
+                isInitialized.current = true;
+            } else {
+                // For subsequent models, immediately apply the locked position/scale
+                scene.position.copy(lockedPosition.current);
+                scene.scale.copy(lockedScale.current);
+            }
         }
 
         // Initialize mixer
@@ -41,7 +55,7 @@ function AvatarModel({ modelPath, currentSign }) {
                 // Stop after animation matches the sign duration roughly
                 const timeout = setTimeout(() => {
                     mixer.current.stopAllAction();
-                }, 3000); // 3 seconds should be enough for "Hello"
+                }, 3000); // 3 seconds should be enough for each sign
                 return () => clearTimeout(timeout);
             } else {
                 mixer.current.stopAllAction();
@@ -75,6 +89,13 @@ function AvatarModel({ modelPath, currentSign }) {
     useFrame((state, delta) => {
         if (mixer.current) {
             mixer.current.update(delta);
+        }
+
+        // PERMANENT POSITION LOCK: Force scene to stay at locked position and scale
+        // This prevents the avatar from moving when switching between different sign GLB files
+        if (scene && isInitialized.current) {
+            scene.position.copy(lockedPosition.current);
+            scene.scale.copy(lockedScale.current);
         }
 
         // Gentle rotation - removed for the card view to keep it steady forward
