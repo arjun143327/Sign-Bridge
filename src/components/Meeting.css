@@ -16,27 +16,39 @@
 
 .captions-overlay {
     position: absolute;
-    bottom: 120px;
+    bottom: 80px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.75);
-    padding: 16px 32px;
-    border-radius: 30px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 12px 28px;
+    border-radius: 8px;
     max-width: 80%;
     text-align: center;
     z-index: 100;
     pointer-events: none;
-    transition: all 0.3s ease;
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    animation: fadeIn 0.3s ease-in;
+    backdrop-filter: blur(8px);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
 }
 
 .captions-text {
     color: white;
-    font-size: 20px;
-    font-weight: 500;
+    font-size: 22px;
+    font-weight: bold;
     line-height: 1.4;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    letter-spacing: 0.5px;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
 }
 
 .video-grid {

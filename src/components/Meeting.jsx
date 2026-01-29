@@ -41,6 +41,17 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             }
         }
     };
+
+    // Handle hand sign detection from ML model
+    const handleHandSignDetected = (signText) => {
+        // Update transcript to show detected sign with emphasis
+        setTranscript(`✋ ${signText}`);
+
+        // Clear after 5 seconds
+        setTimeout(() => {
+            setTranscript('');
+        }, 5000);
+    };
     const remoteVideoRef = useRef(null)
     const localStreamRef = useRef(null)
     const timeoutRef = useRef(null)
@@ -52,7 +63,9 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
         // Initialize local video stream
         startLocalVideo()
 
-        // Load Handpose Model
+        // Load Handpose Model - DISABLED to prevent WebGL Crash
+        // We use MediaPipe in ModelViewer.jsx instead
+        /*
         const loadHandpose = async () => {
             try {
                 await tf.ready();
@@ -65,6 +78,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             }
         };
         loadHandpose();
+        */
 
         return () => {
             // Cleanup
@@ -77,6 +91,10 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
         }
     }, [])
 
+    // OLD HANDPOSE GESTURE DETECTION SYSTEM - DISABLED
+    // This system is replaced by the new MediaPipe + ML model in ModelViewer.jsx
+    // It was causing conflicts and "Gesture Detected: Hello" console spam
+    /*
     // Gesture Detection Loop
     useEffect(() => {
         if (isCameraOn && localVideoRef.current && handposeModelRef.current) {
@@ -139,6 +157,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             }
         }
     }, [isCameraOn, isModelLoaded]);
+    */
 
     useEffect(() => {
         let recognition = null;
@@ -298,9 +317,15 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     }
 
     const handleAIIconClick = () => {
-        // Toggle 3D viewer with the avatar.glb file
-        setIsModelViewerOpen(!isModelViewerOpen)
-    }
+        // Toggle 3D viewer
+        const newState = !isModelViewerOpen;
+        setIsModelViewerOpen(newState);
+
+        // Auto-enable captions when AI Translator opens so hand signs are visible
+        if (newState && !isCaptionsOn) {
+            setIsCaptionsOn(true);
+        }
+    };
 
     return (
         <div className="meeting">
@@ -399,6 +424,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 isCaptionsOn={isCaptionsOn}
                 onToggleCaptions={toggleCaptions}
                 transcript={transcript}
+                onHandSignDetected={handleHandSignDetected}
             />
         </div>
     )
