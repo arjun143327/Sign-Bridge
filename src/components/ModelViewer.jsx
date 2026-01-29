@@ -27,21 +27,25 @@ function AvatarModel({ modelPath, currentSign }) {
         // Initialize mixer
         if (animations && animations.length > 0) {
             mixer.current = new THREE.AnimationMixer(scene);
-            playAnimation('idle');
+            // Do not play idle by default if we want to wait for trigger
+            // playAnimation('idle'); 
         }
     }, [scene, animations]);
 
     // Handle sign changes
     useEffect(() => {
-        if (currentSign && mixer.current) {
-            playAnimation(currentSign);
+        if (mixer.current) {
+            if (currentSign) {
+                playAnimation(currentSign);
 
-            // Revert to idle after animation duration (approx 2s)
-            const timeout = setTimeout(() => {
-                playAnimation('idle');
-            }, 2500);
-
-            return () => clearTimeout(timeout);
+                // Stop after animation matches the sign duration roughly
+                const timeout = setTimeout(() => {
+                    mixer.current.stopAllAction();
+                }, 3000); // 3 seconds should be enough for "Hello"
+                return () => clearTimeout(timeout);
+            } else {
+                mixer.current.stopAllAction();
+            }
         }
     }, [currentSign]);
 

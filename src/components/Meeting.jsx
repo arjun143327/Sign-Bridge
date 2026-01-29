@@ -394,7 +394,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             <ModelViewer
                 isOpen={isModelViewerOpen}
                 onClose={() => setIsModelViewerOpen(false)}
-                modelPath="/avatar.glb"
+                modelPath="/ISL_hello2.glb"
                 currentSign={detectedSign}
                 isCaptionsOn={isCaptionsOn}
                 onToggleCaptions={toggleCaptions}
