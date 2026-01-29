@@ -3,6 +3,7 @@ import './Lobby.css'
 
 function Lobby({ userId, onJoinMeeting }) {
     const [meetingCode, setMeetingCode] = useState('')
+    const [copySuccess, setCopySuccess] = useState(false)
 
     const handleJoinClick = () => {
         if (meetingCode.trim().length === 6) {
@@ -23,6 +24,26 @@ function Lobby({ userId, onJoinMeeting }) {
         }
     }
 
+    const handlePaste = (e) => {
+        e.preventDefault()
+        const pastedText = e.clipboardData.getData('text')
+        // Extract only alphanumeric characters
+        const cleanedText = pastedText.replace(/[^A-Z0-9]/gi, '').toUpperCase()
+        // Take only first 6 characters
+        const validCode = cleanedText.slice(0, 6)
+        setMeetingCode(validCode)
+    }
+
+    const handleCopyId = async () => {
+        try {
+            await navigator.clipboard.writeText(userId)
+            setCopySuccess(true)
+            setTimeout(() => setCopySuccess(false), 2000)
+        } catch (err) {
+            console.error('Failed to copy:', err)
+        }
+    }
+
     return (
         <div className="lobby">
             <div className="lobby-background"></div>
@@ -33,7 +54,24 @@ function Lobby({ userId, onJoinMeeting }) {
 
                     <div className="user-id-section">
                         <p className="user-id-label">YOUR ID</p>
-                        <p className="user-id">{userId}</p>
+                        <div className="user-id-container">
+                            <p className="user-id">{userId}</p>
+                            <button
+                                className="copy-button"
+                                onClick={handleCopyId}
+                                title="Copy ID"
+                            >
+                                {copySuccess ? (
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                                    </svg>
+                                ) : (
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                                    </svg>
+                                )}
+                            </button>
+                        </div>
                     </div>
 
                     <input
@@ -43,6 +81,7 @@ function Lobby({ userId, onJoinMeeting }) {
                         value={meetingCode}
                         onChange={handleInputChange}
                         onKeyPress={handleKeyPress}
+                        onPaste={handlePaste}
                         maxLength={6}
                     />
 
