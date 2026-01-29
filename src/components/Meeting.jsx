@@ -398,6 +398,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 currentSign={detectedSign}
                 isCaptionsOn={isCaptionsOn}
                 onToggleCaptions={toggleCaptions}
+                transcript={transcript}
             />
         </div>
     )
