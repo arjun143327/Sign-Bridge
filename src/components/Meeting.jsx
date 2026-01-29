@@ -61,13 +61,18 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 };
 
                 recognition.onend = () => {
+
                     // Automatically restart if it stops unexpectedly
-                    if (isCaptionsOn && recognition) {
-                        try {
-                            recognition.start();
-                        } catch (e) {
-                            // Ignore start errors (e.g. if already started)
-                        }
+                    if (isCaptionsOn) {
+                        setTimeout(() => {
+                            if (isCaptionsOn && recognition) {
+                                try {
+                                    recognition.start();
+                                } catch (e) {
+                                    console.log('Recognition restart failed:', e);
+                                }
+                            }
+                        }, 300);
                     }
                 };
 
