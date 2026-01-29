@@ -1,0 +1,319 @@
+/* ModelViewer.css - Complete Styling for 3D Avatar Modal */
+
+/* Overlay Background */
+.model-viewer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.9);
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* Main Container */
+.model-viewer-container {
+    position: relative;
+    width: 90%;
+    max-width: 1200px;
+    height: 85vh;
+    max-height: 800px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 24px;
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.6),
+        0 0 100px rgba(102, 126, 234, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Close Button */
+.model-viewer-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: all 0.3s ease;
+}
+
+.model-viewer-close:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: rotate(90deg);
+}
+
+.model-viewer-close:active {
+    transform: rotate(90deg) scale(0.95);
+}
+
+/* Header */
+.model-viewer-header {
+    padding: 30px 40px 20px;
+    text-align: center;
+    color: white;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.model-viewer-header h2 {
+    margin: 0 0 8px 0;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.model-viewer-header p {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.9;
+    font-weight: 400;
+}
+
+/* Canvas Wrapper */
+.model-viewer-canvas-wrapper {
+    flex: 1;
+    width: 100%;
+    position: relative;
+    background: #1a1a2e;
+    overflow: hidden;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    width: 60px;
+    height: 60px;
+    border: 5px solid rgba(255, 255, 255, 0.2);
+    border-top: 5px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Current Sign Display */
+.current-sign-display {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(102, 126, 234, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 15px 30px;
+    border-radius: 50px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: signPulse 0.5s ease-out;
+    z-index: 10;
+}
+
+@keyframes signPulse {
+    0% {
+        transform: translateX(-50%) scale(0.8);
+        opacity: 0;
+    }
+
+    50% {
+        transform: translateX(-50%) scale(1.05);
+    }
+
+    100% {
+        transform: translateX(-50%) scale(1);
+        opacity: 1;
+    }
+}
+
+.sign-label {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.sign-text {
+    color: white;
+    font-size: 20px;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+/* Footer Instructions */
+.model-viewer-footer {
+    padding: 20px 40px;
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.instruction-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.instruction-icon {
+    font-size: 20px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .model-viewer-container {
+        width: 95%;
+        height: 90vh;
+    }
+
+    .model-viewer-header h2 {
+        font-size: 24px;
+    }
+
+    .model-viewer-footer {
+        gap: 25px;
+    }
+}
+
+@media (max-width: 768px) {
+    .model-viewer-container {
+        width: 98%;
+        height: 95vh;
+        border-radius: 16px;
+    }
+
+    .model-viewer-header {
+        padding: 20px 20px 15px;
+    }
+
+    .model-viewer-header h2 {
+        font-size: 20px;
+    }
+
+    .model-viewer-header p {
+        font-size: 12px;
+    }
+
+    .model-viewer-close {
+        width: 40px;
+        height: 40px;
+        top: 15px;
+        right: 15px;
+    }
+
+    .model-viewer-footer {
+        flex-direction: column;
+        gap: 12px;
+        padding: 15px 20px;
+    }
+
+    .instruction-item {
+        font-size: 13px;
+        justify-content: center;
+    }
+
+    .current-sign-display {
+        bottom: 20px;
+        padding: 12px 24px;
+    }
+
+    .sign-label {
+        font-size: 11px;
+    }
+
+    .sign-text {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .model-viewer-header h2 {
+        font-size: 18px;
+    }
+
+    .model-viewer-footer {
+        padding: 12px 15px;
+    }
+
+    .instruction-item {
+        font-size: 12px;
+    }
+
+    .instruction-icon {
+        font-size: 16px;
+    }
+}
+
+/* Additional smooth transitions */
+* {
+    box-sizing: border-box;
+}
+
+.model-viewer-container * {
+    transition: opacity 0.3s ease;
+}
+
+/* Accessibility */
+.model-viewer-close:focus {
+    outline: 2px solid white;
+    outline-offset: 4px;
+}
+
+/* Print styles */
+@media print {
+    .model-viewer-overlay {
+        display: none;
+    }
+}

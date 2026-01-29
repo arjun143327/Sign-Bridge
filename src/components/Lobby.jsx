@@ -5,6 +5,8 @@ function Lobby({ userId, onJoinMeeting }) {
     const [meetingCode, setMeetingCode] = useState('')
     const [copySuccess, setCopySuccess] = useState(false)
 
+
+
     const handleJoinClick = () => {
         if (meetingCode.trim().length === 6) {
             onJoinMeeting(meetingCode.toUpperCase())

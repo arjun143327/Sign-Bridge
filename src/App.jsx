@@ -8,6 +8,8 @@ function App() {
     const [userId, setUserId] = useState('')
     const [meetingId, setMeetingId] = useState('')
 
+
+
     useEffect(() => {
         // Generate random 6-character user ID
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'

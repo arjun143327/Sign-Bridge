@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import ModelViewer from './ModelViewer'
 import './Meeting.css'
 
 function Meeting({ meetingId, userId, onLeaveMeeting }) {
@@ -7,6 +8,8 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const [isScreenSharing, setIsScreenSharing] = useState(false)
     const [isCaptionsOn, setIsCaptionsOn] = useState(false)
     const [transcript, setTranscript] = useState('')
+    const [isModelViewerOpen, setIsModelViewerOpen] = useState(false)
+    const [detectedSign, setDetectedSign] = useState(null) // For ISL detection
     const localVideoRef = useRef(null)
     const remoteVideoRef = useRef(null)
     const localStreamRef = useRef(null)
@@ -44,6 +47,9 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                                 const text = latestResult[0].transcript;
                                 setTranscript(`You: ${text}`);
 
+                                // Check if text matches ISL signs and update avatar
+                                detectSignFromSpeech(text);
+
                                 // Clear existing timeout
                                 if (timeoutRef.current) {
                                     clearTimeout(timeoutRef.current);
@@ -52,6 +58,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                                 // Set silence timeout
                                 timeoutRef.current = setTimeout(() => {
                                     setTranscript('');
+                                    setDetectedSign(null);
                                 }, 3000);
                             }
                         }
@@ -61,7 +68,6 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 };
 
                 recognition.onend = () => {
-
                     // Automatically restart if it stops unexpectedly
                     if (isCaptionsOn) {
                         setTimeout(() => {
@@ -104,6 +110,35 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             }
         }
     }, [isCaptionsOn])
+
+    // Simple ISL sign detection from speech (you can replace this with actual hand detection)
+    const detectSignFromSpeech = (text) => {
+        const lowerText = text.toLowerCase();
+        const signKeywords = {
+            'hello': 'Hello',
+            'hi': 'Hello',
+            'thank you': 'Thank You',
+            'thanks': 'Thank You',
+            'yes': 'Yes',
+            'yeah': 'Yes',
+            'no': 'No',
+            'nope': 'No',
+            'please': 'Please',
+            'help': 'Help',
+            'sorry': 'Sorry',
+            'good': 'Good',
+            'bad': 'Bad',
+            'happy': 'Happy',
+            'sad': 'Sad'
+        };
+
+        for (const [keyword, sign] of Object.entries(signKeywords)) {
+            if (lowerText.includes(keyword)) {
+                setDetectedSign(sign);
+                break;
+            }
+        }
+    };
 
     const startLocalVideo = async () => {
         try {
@@ -162,7 +197,10 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
 
     const toggleCaptions = () => {
         setIsCaptionsOn(!isCaptionsOn);
-        if (!isCaptionsOn) setTranscript('');
+        if (!isCaptionsOn) {
+            setTranscript('');
+            setDetectedSign(null);
+        }
     }
 
     const handleEndCall = () => {
@@ -170,6 +208,11 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             localStreamRef.current.getTracks().forEach(track => track.stop())
         }
         onLeaveMeeting()
+    }
+
+    const handleAIIconClick = () => {
+        // Toggle 3D viewer with the avatar.glb file
+        setIsModelViewerOpen(!isModelViewerOpen)
     }
 
     return (
@@ -183,8 +226,12 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     <div className="video-wrapper local-video">
                         <video ref={localVideoRef} autoPlay playsInline muted />
                         <div className="video-label">You</div>
-                        <div className="user-avatar">
-                            <img src="/avatar.png" alt="User" />
+                        <div
+                            className={`ai-icon ${isModelViewerOpen ? 'active' : ''}`}
+                            onClick={handleAIIconClick}
+                            title={isModelViewerOpen ? "Close AI Assistant" : "Open AI Assistant"}
+                        >
+                            <img src="/ai-icon.png" alt="AI Assistant" />
                         </div>
                     </div>
                 </div>
@@ -255,6 +302,14 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     </button>
                 </div>
             </div>
+
+            {/* 3D Model Viewer Modal */}
+            <ModelViewer
+                isOpen={isModelViewerOpen}
+                onClose={() => setIsModelViewerOpen(false)}
+                modelPath="/avatar.glb"
+                currentSign={detectedSign}
+            />
         </div>
     )
 }
