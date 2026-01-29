@@ -36,7 +36,7 @@
     font-size: 20px;
     font-weight: 500;
     line-height: 1.4;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .video-grid {
@@ -157,10 +157,10 @@
 }
 
 .control-button.end-call {
-    background: #ef4444;
+    background: #dc2626;
 }
 
 .control-button.end-call:hover {
-    background: #dc2626;
+    background: #b91c1c;
     transform: scale(1.1);
 }
