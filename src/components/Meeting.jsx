@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import * as tf from '@tensorflow/tfjs'
+import * as handpose from '@tensorflow-models/handpose'
+import '@tensorflow/tfjs-backend-webgl'
 import ModelViewer from './ModelViewer'
 import './Meeting.css'
 
@@ -10,22 +13,106 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const [transcript, setTranscript] = useState('')
     const [isModelViewerOpen, setIsModelViewerOpen] = useState(false)
     const [detectedSign, setDetectedSign] = useState(null) // For ISL detection
+    const [isModelLoaded, setIsModelLoaded] = useState(false)
     const localVideoRef = useRef(null)
     const remoteVideoRef = useRef(null)
     const localStreamRef = useRef(null)
     const timeoutRef = useRef(null)
+    const handposeModelRef = useRef(null)
+    const requestRef = useRef(null)
+    const lastGestureTime = useRef(0)
 
     useEffect(() => {
         // Initialize local video stream
         startLocalVideo()
+
+        // Load Handpose Model
+        const loadHandpose = async () => {
+            try {
+                await tf.ready();
+                const model = await handpose.load();
+                handposeModelRef.current = model;
+                setIsModelLoaded(true);
+                console.log('Handpose model loaded');
+            } catch (err) {
+                console.error('Failed to load handpose:', err);
+            }
+        };
+        loadHandpose();
 
         return () => {
             // Cleanup
             if (localStreamRef.current) {
                 localStreamRef.current.getTracks().forEach(track => track.stop())
             }
+            if (requestRef.current) {
+                cancelAnimationFrame(requestRef.current);
+            }
         }
     }, [])
+
+    // Gesture Detection Loop
+    useEffect(() => {
+        if (isCameraOn && localVideoRef.current && handposeModelRef.current) {
+            const detect = async () => {
+                if (localVideoRef.current && localVideoRef.current.readyState === 4) {
+                    try {
+                        const video = localVideoRef.current;
+                        const predictions = await handposeModelRef.current.estimateHands(video);
+
+                        if (predictions.length > 0) {
+                            // Simple heuristic for "Hello" (Open Palm)
+                            // Check if all fingers are extended
+                            // We can check the y-coordinates of tips vs bases
+                            // Landmarks: 
+                            // 0: wrist
+                            // 4: thumb tip, 3: thumb ip, 2: thumb mcp
+                            // 8: index tip
+                            // 12: middle tip
+                            // 16: ring tip
+                            // 20: pinky tip
+
+                            const landmarks = predictions[0].landmarks;
+                            const isThumbExtended = landmarks[4][1] < landmarks[2][1];
+                            const isIndexExtended = landmarks[8][1] < landmarks[6][1];
+                            const isMiddleExtended = landmarks[12][1] < landmarks[10][1];
+                            const isRingExtended = landmarks[16][1] < landmarks[14][1];
+                            const isPinkyExtended = landmarks[20][1] < landmarks[18][1];
+
+                            // Simple check: 4 or more fingers extended (simulating open palm / wave)
+                            // Note: Y decreases upwards in computer vision usually, so tip < base means finger is up.
+                            // However, let's verify orientation. Assuming hand is upright.
+
+                            const extendedCount = [isIndexExtended, isMiddleExtended, isRingExtended, isPinkyExtended].filter(Boolean).length;
+
+                            if (extendedCount >= 3) { // 3 or 4 fingers up
+                                const now = Date.now();
+                                if (now - lastGestureTime.current > 2000) { // Debounce 2s
+                                    console.log("Gesture Detected: Hello");
+                                    setDetectedSign('Hello');
+                                    lastGestureTime.current = now;
+
+                                    // Clear after animation
+                                    setTimeout(() => setDetectedSign(null), 2500);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // ignore frame errors
+                    }
+                }
+                requestRef.current = requestAnimationFrame(detect);
+            };
+
+            detect();
+        }
+
+        return () => {
+            if (requestRef.current) {
+                cancelAnimationFrame(requestRef.current);
+            }
+        }
+    }, [isCameraOn, isModelLoaded]);
 
     useEffect(() => {
         let recognition = null;

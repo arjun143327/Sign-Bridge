@@ -3,7 +3,20 @@
     bottom: 100px;
     right: 20px;
     z-index: 1000;
-    animation: slideIn 0.3s ease-out;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.model-viewer-overlay.hidden {
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none;
+    /* We don't use display: none to keep the WebGL context alive */
+    visibility: hidden;
+    transition: opacity 0.3s ease, transform 0.3s ease, visibility 0s linear 0.3s;
+    /* Delay visibility change */
 }
 
 @keyframes slideIn {

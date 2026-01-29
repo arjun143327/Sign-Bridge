@@ -116,10 +116,13 @@ export default function ModelViewer({
         }
     }, [isOpen]);
 
-    if (!isOpen) return null;
+    // Preload the model
+    useEffect(() => {
+        useGLTF.preload(modelPath);
+    }, [modelPath]);
 
     return (
-        <div className="model-viewer-overlay">
+        <div className={`model-viewer-overlay ${!isOpen ? 'hidden' : ''}`}>
             <div className="ai-translator-card">
                 {/* Header */}
                 <div className="card-header">
