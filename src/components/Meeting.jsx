@@ -49,12 +49,12 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
 
                 peer.on('open', (id) => {
                     setPeerId(id);
-                    setConnectionStatus(`ID: ${id}`);
+                    setConnectionStatus("WAITING FOR OTHERS TO JOIN...");
                     console.log('My peer ID is: ' + id);
 
                     // If we are joining someone else (meetingId !== userId), call them
                     if (meetingId && meetingId !== userId) {
-                        setConnectionStatus(`Calling ${meetingId}...`);
+                        setConnectionStatus("CONNECTING...");
                         const call = peer.call(meetingId, stream);
                         callInstance.current = call;
 
@@ -62,21 +62,18 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                             if (remoteVideoRef.current) {
                                 remoteVideoRef.current.srcObject = remoteStream;
                             }
-                            setConnectionStatus('Connected');
+                            setConnectionStatus(""); // Connected
                         });
 
                         call.on('error', (err) => {
                             console.error("Call error:", err);
-                            setConnectionStatus('Call Failed');
+                            setConnectionStatus("CALL FAILED");
                         });
-                    } else {
-                        setConnectionStatus("Waiting for others to join...");
                     }
                 });
 
                 // Answer Incoming Calls
                 peer.on('call', (call) => {
-                    setConnectionStatus("Incoming Call...");
                     call.answer(stream); // Answer with our stream
                     callInstance.current = call;
 
@@ -84,23 +81,22 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                         if (remoteVideoRef.current) {
                             remoteVideoRef.current.srcObject = remoteStream;
                         }
-                        setConnectionStatus('Connected');
+                        setConnectionStatus(""); // Connected
                     });
                 });
 
                 peer.on('error', (err) => {
                     console.error("Peer error:", err);
-                    // Handle specific errors like "ID taken"
                     if (err.type === 'unavailable-id') {
-                        setConnectionStatus("ID taken. Try refreshing.");
+                        setConnectionStatus("ID TAKEN");
                     } else {
-                        setConnectionStatus("Connection Error");
+                        setConnectionStatus("CONNECTION ERROR");
                     }
                 });
 
             } catch (err) {
                 console.error("Failed to start meeting:", err);
-                setConnectionStatus("Camera Error");
+                setConnectionStatus("CAMERA ERROR");
             }
         };
 
@@ -139,10 +135,9 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
         }
     };
 
-    // Toggle Screen Share (Replaces Video Track)
+    // Toggle Screen Share
     const toggleScreenShare = async () => {
         if (isScreenSharing) {
-            // Stop sharing (revert to camera)
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             const videoTrack = stream.getVideoTracks()[0];
 
@@ -156,7 +151,6 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             }
             setIsScreenSharing(false);
         } else {
-            // Start sharing
             try {
                 const screenStream = await navigator.mediaDevices.getDisplayMedia({ cursor: true });
                 const screenTrack = screenStream.getVideoTracks()[0];
@@ -170,7 +164,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
                 }
 
-                screenTrack.onended = () => toggleScreenShare(); // Handle external stop
+                screenTrack.onended = () => toggleScreenShare();
                 setIsScreenSharing(true);
             } catch (err) {
                 console.error("Screen share failed", err);
@@ -189,38 +183,54 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
 
     return (
         <div className="meeting-container">
-            {/* Header with Connection Status */}
-            <div className="meeting-header">
-                <div className="meeting-info">
-                    <h2>Meeting: {meetingId}</h2>
-                    <span className={`status-badge ${connectionStatus === 'Connected' ? 'connected' : 'connecting'}`}>
-                        {connectionStatus}
-                    </span>
+            {/* Header Manually Styled to match Screenshot */}
+            <div style={{
+                position: 'absolute',
+                top: 20,
+                left: 20,
+                zIndex: 100,
+                color: 'white',
+                fontFamily: 'sans-serif'
+            }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>
+                    Meeting: {meetingId}
                 </div>
+                {connectionStatus && (
+                    <div style={{
+                        backgroundColor: '#fbbf24', /* yellow-400 */
+                        color: '#000',
+                        padding: '4px 12px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        display: 'inline-block'
+                    }}>
+                        {connectionStatus}
+                    </div>
+                )}
             </div>
 
             <div className="video-grid">
-                {/* Remote Video (Main) */}
-                <div className="video-card remote-video">
+                {/* REMOTE USER */}
+                <div className="video-wrapper remote-video">
                     <video
                         ref={remoteVideoRef}
                         autoPlay
                         playsInline
-                        className={!isCameraOn ? 'hidden' : ''}
                     />
-                    <div className="user-label">Remote User</div>
+                    <div className="video-label">Remote User</div>
                 </div>
 
-                {/* Local Video (Picture in Picture) */}
-                <div className="video-card local-video">
+                {/* LOCAL USER */}
+                <div className="video-wrapper local-video">
                     <video
                         ref={localVideoRef}
                         autoPlay
                         playsInline
                         muted
-                        className={!isCameraOn ? 'video-off' : ''}
+                        className={!isCameraOn ? 'hidden' : ''}
                     />
-                    <div className="user-label">You</div>
+                    <div className="video-label">You</div>
                 </div>
             </div>
 
@@ -230,6 +240,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 </div>
             )}
 
+            {/* CONTROLS */}
             <div className="controls">
                 <button
                     className={`control-button ${isMicOn ? 'active' : 'inactive'}`}
@@ -269,12 +280,17 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     </svg>
                 </button>
 
+                {/* ROBOT ICON - MATCHED TO SCREENSHOT */}
                 <button
                     className="control-button ai-trigger"
                     onClick={() => setIsModelViewerOpen(true)}
                     title="Translate Sign Language"
+                    style={{
+                        background: 'linear-gradient(135deg, #60a5fa, #8b5cf6)', /* Blue-Purple matches icon */
+                        border: '2px solid rgba(255,255,255,0.2)'
+                    }}
                 >
-                    <span style={{ fontSize: '20px' }}>🤖</span>
+                    <span style={{ fontSize: '24px' }}>🤖</span>
                 </button>
 
                 <button
