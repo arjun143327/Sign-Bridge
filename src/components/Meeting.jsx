@@ -162,11 +162,14 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                             setTranscript(`🗣️ ${data.text}`);
                             setIsCaptionsOn(true); // Auto-show
 
-                            // OPTIONAL: Also trigger local avatar for remote sign?
-                            // For now, let's keep avatar strictly for LOCAL User's actions
-                            // to avoid confusion on who is signing.
+                            // TRIGGER AVATAR ANIMATION FOR REMOTE SIGN
+                            setDetectedSign(data.text);
 
-                            setTimeout(() => setTranscript(''), 5000);
+                            // Reset after 5 seconds
+                            setTimeout(() => {
+                                setTranscript('');
+                                setDetectedSign(null);
+                            }, 5000);
                         }
                     });
                 });
