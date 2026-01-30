@@ -57,33 +57,49 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
         if (SpeechRecognition) {
             const recognition = new SpeechRecognition();
             recognition.continuous = true;
-            recognition.interimResults = false;
+            recognition.interimResults = true; // CHANGED: Enable fast detection
             recognition.lang = 'en-US';
 
-            recognition.onresult = (event) => {
-                const last = event.results.length - 1;
-                const command = event.results[last][0].transcript.trim().toLowerCase();
-                console.log("🎤 Voice Command:", command);
+            // DEBOUNCE LOGIC (Prevent spamming the same sign)
+            let lastDetectedTime = 0;
+            const COOLDOWN_MS = 2000;
 
-                // KEYWORD MATCHING (6 Words Support)
-                if (command.includes("hello") || command.includes("hi")) {
-                    handleHandSignDetected("Hello", 'voice');
-                }
-                else if (command.includes("thank") || command.includes("thanks")) {
-                    handleHandSignDetected("Thank You", 'voice');
-                }
-                else if (command.includes("welcome")) {
-                    handleHandSignDetected("Welcome", 'voice');
-                }
-                else if (command.includes("our")) {
-                    handleHandSignDetected("Our", 'voice');
-                }
-                else if (command.includes("team")) {
-                    handleHandSignDetected("Team", 'voice');
-                }
-                else if (command.includes("to") || command.includes("too") || command.includes("two")) {
-                    // "to" is hard to catch alone, added generic homophones
-                    handleHandSignDetected("To", 'voice');
+            recognition.onresult = (event) => {
+                const results = Array.from(event.results);
+                // Check ALL results (interim and final) for keywords
+                const transcript = results
+                    .map(result => result[0].transcript)
+                    .join(' ')
+                    .toLowerCase();
+
+                // Get the very last piece of text spoken
+                const latestFragment = results[results.length - 1][0].transcript.toLowerCase();
+
+                console.log("🎤 Voice Stream:", latestFragment);
+
+                const now = Date.now();
+                if (now - lastDetectedTime < COOLDOWN_MS) return;
+
+                const keywords = [
+                    { word: 'hello', sign: 'Hello' },
+                    { word: 'hi', sign: 'Hello' },
+                    { word: 'thank', sign: 'Thank You' },
+                    { word: 'thanks', sign: 'Thank You' },
+                    { word: 'welcome', sign: 'Welcome' },
+                    { word: 'our', sign: 'Our' },
+                    { word: 'team', sign: 'Team' },
+                    { word: 'to', sign: 'To' },
+                    { word: 'two', sign: 'To' }, // Homophone
+                    { word: 'too', sign: 'To' }  // Homophone
+                ];
+
+                for (const k of keywords) {
+                    if (latestFragment.includes(k.word)) {
+                        console.log(`✅ MATCHED: ${k.word} -> ${k.sign}`);
+                        handleHandSignDetected(k.sign, 'voice');
+                        lastDetectedTime = now;
+                        break; // Trigger only one sign per checking window
+                    }
                 }
             };
 
