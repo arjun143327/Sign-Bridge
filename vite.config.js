@@ -6,5 +6,8 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true
+  },
+  optimizeDeps: {
+    exclude: ['@mediapipe/hands', '@mediapipe/camera_utils', '@mediapipe/drawing_utils']
   }
 })
