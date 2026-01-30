@@ -149,6 +149,24 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                             console.log("Data connection opened!");
                             connInstance.current = conn;
                         });
+
+                        // ADDED: Caller needs to listen for data too!
+                        conn.on('data', (data) => {
+                            console.log("Caller received data:", data);
+                            if (data.type === 'transcript') {
+                                setTranscript(`${data.source === 'voice' ? '🗣️' : '✋'} ${data.text}`);
+                                setIsCaptionsOn(true);
+
+                                if (data.source === 'voice') {
+                                    setDetectedSign(data.text);
+                                }
+
+                                setTimeout(() => {
+                                    setTranscript('');
+                                    if (data.source === 'voice') setDetectedSign(null);
+                                }, 5000);
+                            }
+                        });
                     }
                 });
 
