@@ -2,6 +2,7 @@ import React, { Suspense, useRef, useEffect, useState, useCallback } from 'react
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF, Environment, Html } from '@react-three/drei';
 import * as THREE from 'three';
+import * as tf from '@tensorflow/tfjs';
 import Webcam from 'react-webcam';
 // REMOVED IMPORTS that cause bundling errors
 // We now access window.Hands, window.Camera, window.drawConnectors from CDN scripts in index.html

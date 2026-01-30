@@ -91,6 +91,18 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 console.warn("Speech recognition error", event.error);
             };
 
+            recognition.onend = () => {
+                // Auto-restart if it stops (as long as Mic is supposedly On)
+                if (isMicOn) {
+                    try {
+                        recognition.start();
+                        console.log("🎤 Speech Recognition restarted");
+                    } catch (e) {
+                        // ignore if already started
+                    }
+                }
+            };
+
             // Auto-start if mic is on
             if (isMicOn) {
                 try {
@@ -101,6 +113,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
             }
 
             return () => {
+                recognition.onend = null; // Prevent restart loop on unmount
                 recognition.stop();
             };
         }
