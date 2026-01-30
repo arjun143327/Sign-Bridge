@@ -20,24 +20,75 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const localStreamRef = useRef(null)
     const peerInstance = useRef(null)
     const callInstance = useRef(null)
-    const connInstance = useRef(null) // NEW: Data Connection Ref
+    const connInstance = useRef(null)
 
-    // Handle hand sign detection from ML model
+    // Handle hand sign detection (Voice or Hand)
     const handleHandSignDetected = (signText) => {
-        // 1. Show locally and Auto-Enable Captions
-        setTranscript(`✋ ${signText}`);
-        setIsCaptionsOn(true); // <--- AUTO ENABLE
+        console.log("🤟 Sign Detected:", signText);
 
-        // 2. Send to remote peer if connected
+        // 1. TRIGGER AVATAR ANIMATION (Fixes "Avatar not moving")
+        setDetectedSign(signText);
+
+        // 2. SHOW SUBTITLE LOCALLY
+        setTranscript(`✋ ${signText}`);
+        setIsCaptionsOn(true); // Auto-enable captions
+
+        // 3. SEND TO REMOTE PEER (Subtitle Sync)
         if (connInstance.current && connInstance.current.open) {
             console.log("Sending transcript:", signText);
             connInstance.current.send({ type: 'transcript', text: signText });
         }
 
+        // Reset state after 5 seconds
         setTimeout(() => {
             setTranscript('');
+            setDetectedSign(null); // Stop avatar animation
         }, 5000);
     };
+
+    // --- VOICE RECOGNITION SETUP ---
+    useEffect(() => {
+        // Simple Native Speech Recognition (Supported in Chrome/Edge)
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event) => {
+                const last = event.results.length - 1;
+                const command = event.results[last][0].transcript.trim().toLowerCase();
+                console.log("🎤 Voice Command:", command);
+
+                // KEYWORD MATCHING
+                if (command.includes("hello") || command.includes("hi")) {
+                    handleHandSignDetected("Hello");
+                }
+                else if (command.includes("thank") || command.includes("thanks")) {
+                    handleHandSignDetected("Thank You");
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.warn("Speech recognition error", event.error);
+            };
+
+            // Auto-start if mic is on
+            if (isMicOn) {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    // Ignore if already started
+                }
+            }
+
+            return () => {
+                recognition.stop();
+            };
+        }
+    }, [isMicOn]); // Re-bind if Mic toggles
 
     // 1. Initialize PeerJS & Local Stream
     useEffect(() => {
@@ -62,7 +113,6 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     setConnectionStatus("WAITING FOR OTHERS TO JOIN...");
                     console.log('My peer ID is: ' + id);
 
-                    // If we are joining someone else (meetingId !== userId), call them
                     if (meetingId && meetingId !== userId) {
                         setConnectionStatus("CONNECTING...");
 
@@ -88,20 +138,19 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
 
                 // Answer Incoming Calls (Video)
                 peer.on('call', (call) => {
-                    call.answer(stream); // Answer with our stream
+                    call.answer(stream);
                     callInstance.current = call;
 
                     call.on('stream', (remoteStream) => {
                         if (remoteVideoRef.current) {
                             remoteVideoRef.current.srcObject = remoteStream;
                         }
-                        setConnectionStatus(""); // Connected
+                        setConnectionStatus("");
                     });
                 });
 
-                // Handle Incoming Data Connection (Subtitles)
+                // Handle Incoming Data Connection (Subtitles/Signs)
                 peer.on('connection', (conn) => {
-                    console.log("Incoming data connection...");
                     conn.on('open', () => {
                         console.log("Data connection established!");
                         connInstance.current = conn;
@@ -111,7 +160,12 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                         console.log("Received data:", data);
                         if (data.type === 'transcript') {
                             setTranscript(`🗣️ ${data.text}`);
-                            setIsCaptionsOn(true); // <--- AUTO ENABLE FOR REMOTE
+                            setIsCaptionsOn(true); // Auto-show
+
+                            // OPTIONAL: Also trigger local avatar for remote sign?
+                            // For now, let's keep avatar strictly for LOCAL User's actions
+                            // to avoid confusion on who is signing.
+
                             setTimeout(() => setTranscript(''), 5000);
                         }
                     });
@@ -135,7 +189,6 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
         startMeeting();
 
         return () => {
-            // Cleanup on unmount
             if (localStreamRef.current) {
                 localStreamRef.current.getTracks().forEach(track => track.stop());
             }
@@ -143,7 +196,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 peerInstance.current.destroy();
             }
         };
-    }, [userId, meetingId]); // Re-run if IDs change
+    }, [userId, meetingId]);
 
     // Toggle Camera
     const toggleCamera = () => {
@@ -215,7 +268,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
 
     return (
         <div className="meeting-container">
-            {/* Header Manually Styled to match Screenshot */}
+            {/* Header */}
             <div style={{
                 position: 'absolute',
                 top: 20,
@@ -229,7 +282,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 </div>
                 {connectionStatus && (
                     <div style={{
-                        backgroundColor: '#fbbf24', /* yellow-400 */
+                        backgroundColor: '#fbbf24',
                         color: '#000',
                         padding: '4px 12px',
                         borderRadius: '4px',
@@ -312,13 +365,12 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     </svg>
                 </button>
 
-                {/* ROBOT ICON - MATCHED TO SCREENSHOT */}
                 <button
                     className="control-button ai-trigger"
                     onClick={() => setIsModelViewerOpen(true)}
                     title="Translate Sign Language"
                     style={{
-                        background: 'linear-gradient(135deg, #60a5fa, #8b5cf6)', /* Blue-Purple matches icon */
+                        background: 'linear-gradient(135deg, #60a5fa, #8b5cf6)',
                         border: '2px solid rgba(255,255,255,0.2)'
                     }}
                 >
@@ -346,7 +398,6 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 </button>
             </div>
 
-            {/* 3D Model Viewer Modal */}
             <ModelViewer
                 isOpen={isModelViewerOpen}
                 onClose={() => setIsModelViewerOpen(false)}
