@@ -197,26 +197,42 @@ export default function ModelViewer({
     };
     const activeModelPath = (currentSign && signModelMap[currentSign]) ? signModelMap[currentSign] : modelPath;
 
-    // Load Saved Model
+    // 1. Initialize AI Model
     useEffect(() => {
-        const loadModel = async () => {
+        const initAI = async () => {
             if (!isOpen) return;
 
+            // Prevent re-initialization if already ready
+            if (recogStatus.includes("Ready")) return;
+
             try {
-                const savedModel = localStorage.getItem('isl-model');
-                if (savedModel) {
-                    classifier.load(savedModel);
-                    setTrainingCounts(classifier.getExampleCounts());
-                    setRecogStatus("Ready (Custom Model Loaded)");
-                    console.log("✅ Custom Model Loaded from Storage");
-                } else {
-                    setRecogStatus("No Training Data found. Please Train.");
+                setRecogStatus("Initializing TensorFlow...");
+                await tf.ready();
+
+                // Fallback to CPU if WebGL fails (common cause of crashes)
+                try {
+                    await tf.setBackend('webgl');
+                } catch (bgErr) {
+                    console.warn("WebGL failed, falling back to CPU", bgErr);
+                    await tf.setBackend('cpu');
                 }
-            } catch (err) {
-                console.error("Failed to load custom model", err);
+
+                console.log(`✅ TFJS Backend: ${tf.getBackend()}`);
+
+                if (localStorage.getItem('isl-model')) {
+                    setRecogStatus("Loading Custom Model...");
+                    // Let the other useEffect handle the actual loading to avoid race conditions
+                } else {
+                    setRecogStatus("System Ready (No Model Trained)");
+                }
+
+            } catch (error) {
+                console.error("❌ [SYSTEM] AI Init Failed:", error);
+                setRecogStatus(`Error: ${error.message}`);
+                // alert(`AI Crash: ${error.message}`); // Optional: visible alert
             }
         };
-        loadModel();
+        initAI();
     }, [isOpen]);
 
     // 2. Setup Camera & MediaPipe (Auto-Start when Ready)

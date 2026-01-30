@@ -11,11 +11,6 @@ function Lobby({ userId, onJoinMeeting }) {
         }
     }
 
-    const handleStartMeeting = () => {
-        // Host joins with their own ID
-        onJoinMeeting(userId)
-    }
-
     const handleInputChange = (e) => {
         const value = e.target.value.toUpperCase()
         if (value.length <= 6) {
@@ -79,37 +74,24 @@ function Lobby({ userId, onJoinMeeting }) {
                         </div>
                     </div>
 
-                    <div className="action-divider">
-                        <span>OR</span>
-                    </div>
+                    <input
+                        type="text"
+                        className="meeting-input"
+                        placeholder="Enter Meeting ID"
+                        value={meetingCode}
+                        onChange={handleInputChange}
+                        onKeyPress={handleKeyPress}
+                        onPaste={handlePaste}
+                        maxLength={6}
+                    />
 
                     <button
-                        className="start-meeting-button"
-                        onClick={handleStartMeeting}
+                        className="join-button"
+                        onClick={handleJoinClick}
+                        disabled={meetingCode.length !== 6}
                     >
-                        Start Instant Meeting
+                        Join Meeting
                     </button>
-
-                    <div className="join-section">
-                        <input
-                            type="text"
-                            className="meeting-input"
-                            placeholder="Enter Host ID to Join"
-                            value={meetingCode}
-                            onChange={handleInputChange}
-                            onKeyPress={handleKeyPress}
-                            onPaste={handlePaste}
-                            maxLength={6}
-                        />
-
-                        <button
-                            className="join-button"
-                            onClick={handleJoinClick}
-                            disabled={meetingCode.length !== 6}
-                        >
-                            Join Meeting
-                        </button>
-                    </div>
 
                     <div className="service-status">
                         <span className="status-dot"></span>
