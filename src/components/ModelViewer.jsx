@@ -3,11 +3,10 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF, Environment, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import Webcam from 'react-webcam';
-import { Hands, HAND_CONNECTIONS } from '@mediapipe/hands';
-import { Camera } from '@mediapipe/camera_utils';
-import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
-import { ISLClassifier } from '../utils/ISLClassifier'; // NEW: Import KNN Classifier
-import preTrainedModel from '../isl_model.json'; // LOAD PRE-TRAINED TRAINING DATA
+// REMOVED IMPORTS that cause bundling errors
+// We now access window.Hands, window.Camera, window.drawConnectors from CDN scripts in index.html
+import { ISLClassifier } from '../utils/ISLClassifier';
+import preTrainedModel from '../isl_model.json';
 import './ModelViewer.css';
 
 // --- AVATAR MODEL COMPONENT ---
@@ -16,7 +15,7 @@ function AvatarModel({ modelPath, currentSign }) {
     const { scene, animations } = useGLTF(modelPath);
     const mixer = useRef();
 
-    // Position Locking Logic (From your code)
+    // Position Locking Logic
     const lockedPosition = useRef(new THREE.Vector3());
     const lockedScale = useRef(new THREE.Vector3());
     const isInitialized = useRef(false);
@@ -47,7 +46,6 @@ function AvatarModel({ modelPath, currentSign }) {
 
         if (animations && animations.length > 0) {
             mixer.current = new THREE.AnimationMixer(scene);
-            // Don't auto-play any animation - stay still until triggered
         }
     }, [scene, animations]);
 
@@ -56,7 +54,6 @@ function AvatarModel({ modelPath, currentSign }) {
         if (mixer.current && currentSign) {
             playAnimation(currentSign);
             const timeout = setTimeout(() => {
-                // Stop all animations after sign is done - stay still
                 mixer.current.stopAllAction();
             }, 3000);
             return () => clearTimeout(timeout);
@@ -77,8 +74,6 @@ function AvatarModel({ modelPath, currentSign }) {
 
     useFrame((state, delta) => {
         if (mixer.current) mixer.current.update(delta);
-
-        // Force lock every frame to prevent jumping
         if (scene && isInitialized.current) {
             scene.position.copy(lockedPosition.current);
             scene.scale.copy(lockedScale.current);
@@ -106,10 +101,9 @@ export default function ModelViewer({
 }) {
     // 1. Initialize Classifier
     const [classifier] = useState(new ISLClassifier());
-    const [loadError, setLoadError] = useState(null); // RESTORED
-    const [isTraining, setIsTraining] = useState(false); // Toggle Training Mode
-    const [trainingCounts, setTrainingCounts] = useState({}); // Track examples per class
-    // const [trainingLabel, setTrainingLabel] = useState(null); // REMOVED: Old Hold-to-Train
+    const [loadError, setLoadError] = useState(null);
+    const [isTraining, setIsTraining] = useState(false);
+    const [trainingCounts, setTrainingCounts] = useState({});
 
     // NEW: Hands-Free Training State
     const [trainingState, setTrainingState] = useState('idle'); // 'idle' | 'countdown' | 'capturing'
@@ -120,12 +114,11 @@ export default function ModelViewer({
     const [recogStatus, setRecogStatus] = useState("Initializing...");
     const [detectedText, setDetectedText] = useState("Waiting for sign...");
     const [handDetected, setHandDetected] = useState(false);
-    const [isCameraReady, setIsCameraReady] = useState(false); // NEW: Track camera status
+    const [isCameraReady, setIsCameraReady] = useState(false);
 
-    // LOAD MODEL ON STARTUP (LocalStorage > Bundled JSON)
+    // LOAD MODEL ON STARTUP
     useEffect(() => {
         const load = () => {
-            // 1. Try Local Storage (User's latest training)
             const saved = localStorage.getItem('isl-model');
             if (saved) {
                 classifier.load(saved);
@@ -133,7 +126,6 @@ export default function ModelViewer({
                 setTrainingCounts(classifier.getExampleCounts());
                 console.log("Loaded Custom Model from LocalStorage");
             }
-            // 2. Try Bundled JSON (Universal)
             else if (preTrainedModel) {
                 try {
                     classifier.load(JSON.stringify(preTrainedModel));
@@ -156,16 +148,13 @@ export default function ModelViewer({
         setTrainingState('countdown');
         setCountdown(3);
 
-        // 3... 2... 1...
         let count = 3;
         const timer = setInterval(() => {
             count--;
             setCountdown(count);
             if (count === 0) {
                 clearInterval(timer);
-                setTrainingState('capturing'); // Start capturing
-
-                // Capture for 3 seconds then stop
+                setTrainingState('capturing');
                 setTimeout(() => {
                     setTrainingState('idle');
                     setActiveLabel(null);
@@ -177,20 +166,20 @@ export default function ModelViewer({
 
     const webcamRef = useRef(null);
     const canvasRef = useRef(null);
+    const handsRef = useRef(null);
+    const cameraRef = useRef(null);
 
-    // REFS FOR STATE ACCESS INSIDE CALLBACKS (Fixes Stale Closure)
+    // REFS FOR STATE ACCESS INSIDE CALLBACKS
     const isTrainingRef = useRef(isTraining);
     const trainingStateRef = useRef(trainingState);
     const activeLabelRef = useRef(activeLabel);
 
-    // Sync Refs
     useEffect(() => {
         isTrainingRef.current = isTraining;
         trainingStateRef.current = trainingState;
         activeLabelRef.current = activeLabel;
     }, [isTraining, trainingState, activeLabel]);
 
-    // Map signs to GLB files
     const signModelMap = {
         'Thank You': '/ISL_thankyou.glb',
         'Hello': '/ISL_hello2.glb',
@@ -201,35 +190,27 @@ export default function ModelViewer({
     useEffect(() => {
         const initAI = async () => {
             if (!isOpen) return;
-
-            // Prevent re-initialization if already ready
             if (recogStatus.includes("Ready")) return;
 
             try {
                 setRecogStatus("Initializing TensorFlow...");
                 await tf.ready();
-
-                // Fallback to CPU if WebGL fails (common cause of crashes)
                 try {
                     await tf.setBackend('webgl');
                 } catch (bgErr) {
                     console.warn("WebGL failed, falling back to CPU", bgErr);
                     await tf.setBackend('cpu');
                 }
-
                 console.log(`✅ TFJS Backend: ${tf.getBackend()}`);
 
                 if (localStorage.getItem('isl-model')) {
                     setRecogStatus("Loading Custom Model...");
-                    // Let the other useEffect handle the actual loading to avoid race conditions
                 } else {
                     setRecogStatus("System Ready (No Model Trained)");
                 }
-
             } catch (error) {
                 console.error("❌ [SYSTEM] AI Init Failed:", error);
                 setRecogStatus(`Error: ${error.message}`);
-                // alert(`AI Crash: ${error.message}`); // Optional: visible alert
             }
         };
         initAI();
@@ -240,26 +221,36 @@ export default function ModelViewer({
         if (!isOpen || !isCameraReady || !webcamRef.current || !webcamRef.current.video) return;
 
         console.log('🔹 [DEBUG] Starting MediaPipe (Auto-Start)');
+
+        // Wait for Global Scripts to Load
+        if (!window.Hands || !window.Camera) {
+            console.warn("MediaPipe globals not found! Retrying in 1s...");
+            setTimeout(() => setIsCameraReady(true), 1000); // Hacky retry
+            return;
+        }
+
         const videoElement = webcamRef.current.video;
 
-        const hands = new Hands({
+        // USA GLOBAL WINDOW.HANDS
+        const hands = new window.Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
         });
 
         hands.setOptions({
-            maxNumHands: 2, // Support 2 hands for ISL
+            maxNumHands: 2,
             modelComplexity: 1,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5,
         });
 
         hands.onResults(onResults);
+        handsRef.current = hands;
 
         let lastFrameTime = 0;
-        const camera = new Camera(videoElement, {
+        // USE GLOBAL WINDOW.CAMERA
+        const camera = new window.Camera(videoElement, {
             onFrame: async () => {
                 const now = Date.now();
-                // Throttle to ~10 FPS to prevent crash
                 if (now - lastFrameTime >= 100) {
                     lastFrameTime = now;
                     if (webcamRef.current && webcamRef.current.video) {
@@ -271,67 +262,50 @@ export default function ModelViewer({
             height: 480,
         });
         camera.start();
+        cameraRef.current = camera;
 
         return () => {
-            // Cleanup
-            camera.stop();
+            if (cameraRef.current) cameraRef.current.stop();
+            if (handsRef.current) handsRef.current.close();
         };
     }, [isOpen, isCameraReady]);
 
-    // 3. Data Collection Loop (Handles 126 Inputs)
+    // 3. Data Collection Loop
     const onResults = async (results) => {
-        if (canvasRef.current) {
+        if (canvasRef.current && window.drawConnectors && window.drawLandmarks && window.HAND_CONNECTIONS) {
             const ctx = canvasRef.current.getContext('2d');
             ctx.clearRect(0, 0, 640, 480);
 
-            // ⚠️ PADDING: Create array of 126 zeros to match your model input shape
             let frameData = new Array(126).fill(0);
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
-                console.log('🔹 [DEBUG] Hand detected, landmarks:', landmarks.length);
 
-                // Draw visuals for debugging
-                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 5 });
-                drawLandmarks(ctx, landmarks, { color: '#FF0000', lineWidth: 2 });
+                // USE GLOBAL DRAWING UTILS
+                window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 5 });
+                window.drawLandmarks(ctx, landmarks, { color: '#FF0000', lineWidth: 2 });
 
-                // PREPROCESSING: Handedness-aware mapping (Model trained on [Left, Right])
-                // 126 features = 63 Left + 63 Right
-
-                const handedness = results.multiHandedness[0].label; // "Left" or "Right"
-
-                // landmarks already defined above
+                const handedness = results.multiHandedness[0].label;
                 const wrist = landmarks[0];
-
-                // Determine offset: Left -> 0, Right -> 63
                 const isRight = handedness === 'Right';
                 const offset = isRight ? 63 : 0;
 
-                console.log(`🔹 [DEBUG] Hand: ${handedness}, Offset: ${offset} (Relative Coords)`);
-
                 for (let i = 0; i < landmarks.length; i++) {
-                    // Relative measurements make detection position-invariant
                     const x = landmarks[i].x - wrist.x;
                     const y = landmarks[i].y - wrist.y;
                     const z = landmarks[i].z - wrist.z;
-
-                    // Fill specific slot based on handedness
                     frameData[offset + i * 3] = x;
                     frameData[offset + i * 3 + 1] = y;
                     frameData[offset + i * 3 + 2] = z;
                 }
 
                 // 3. KNN Logic - Train or Predict
-                // READ FROM REFS
                 const _isTraining = isTrainingRef.current;
                 const _trainingState = trainingStateRef.current;
-                const _activeLabel = activeLabelRef.current; // Captured Label
+                const _activeLabel = activeLabelRef.current;
 
                 if (_isTraining && _trainingState === 'capturing' && _activeLabel) {
-                    // Start Capture!
                     classifier.addExample(frameData, _activeLabel);
-
-                    // Update UI counts
                     setTrainingCounts(prev => ({
                         ...prev,
                         [_activeLabel]: (prev[_activeLabel] || 0) + 1
@@ -339,16 +313,11 @@ export default function ModelViewer({
                     setRecogStatus(`Training... ${_activeLabel}`);
 
                 } else if (!_isTraining) {
-                    // Prediction Mode
                     const result = await classifier.predict(frameData);
-
                     if (result) {
                         const confidencePct = (result.confidence * 100).toFixed(0);
-                        console.log(`🤟 [DETECTED] ${result.label} (${confidencePct}%)`);
                         setDetectedText(result.label);
                         setRecogStatus(`Detected: ${result.label} (${confidencePct}%)`);
-
-                        // Send to Meeting
                         if (onHandSignDetected) {
                             onHandSignDetected(result.label);
                         }
@@ -359,9 +328,6 @@ export default function ModelViewer({
             }
         }
     };
-
-    // Old LSTM Prediction Logic - REMOVED
-    // KNN uses onResults directly for instant prediction
 
     // Preload models logic
     useEffect(() => {
@@ -401,9 +367,6 @@ export default function ModelViewer({
 
     return (
         <div className={`model-viewer-overlay ${!isOpen ? 'hidden' : ''}`}>
-            {/* Hidden Camera & Canvas for AI Processing - Runs silently in background */}
-            {/* Hidden Camera & Canvas for AI Processing: Moved inside Training Panel for cleaner UI */}
-
             <div className="ai-translator-card">
                 {/* Header */}
                 <div className="card-header">
@@ -440,7 +403,6 @@ export default function ModelViewer({
                                     disabled={trainingState !== 'idle'}
                                     style={{
                                         padding: '10px 5px',
-                                        // Colors: Green for Active Capture, Yellow for Countdown, Grey for Idle
                                         background: activeLabel === label ? (trainingState === 'capturing' ? '#00e676' : '#ffeb3b') : '#444',
                                         color: activeLabel === label && trainingState === 'countdown' ? 'black' : 'white',
                                         border: '1px solid #555',
