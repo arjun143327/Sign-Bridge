@@ -24,8 +24,9 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
 
     // Handle hand sign detection from ML model
     const handleHandSignDetected = (signText) => {
-        // 1. Show locally
+        // 1. Show locally and Auto-Enable Captions
         setTranscript(`✋ ${signText}`);
+        setIsCaptionsOn(true); // <--- AUTO ENABLE
 
         // 2. Send to remote peer if connected
         if (connInstance.current && connInstance.current.open) {
@@ -109,7 +110,8 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     conn.on('data', (data) => {
                         console.log("Received data:", data);
                         if (data.type === 'transcript') {
-                            setTranscript(`🗣️ ${data.text}`); // Distinct icon for remote
+                            setTranscript(`🗣️ ${data.text}`);
+                            setIsCaptionsOn(true); // <--- AUTO ENABLE FOR REMOTE
                             setTimeout(() => setTranscript(''), 5000);
                         }
                     });
