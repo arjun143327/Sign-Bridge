@@ -5,12 +5,15 @@ function Lobby({ userId, onJoinMeeting }) {
     const [meetingCode, setMeetingCode] = useState('')
     const [copySuccess, setCopySuccess] = useState(false)
 
-
-
     const handleJoinClick = () => {
         if (meetingCode.trim().length === 6) {
             onJoinMeeting(meetingCode.toUpperCase())
         }
+    }
+
+    const handleStartMeeting = () => {
+        // Host joins with their own ID
+        onJoinMeeting(userId)
     }
 
     const handleInputChange = (e) => {
@@ -76,24 +79,37 @@ function Lobby({ userId, onJoinMeeting }) {
                         </div>
                     </div>
 
-                    <input
-                        type="text"
-                        className="meeting-input"
-                        placeholder="Enter Meeting ID"
-                        value={meetingCode}
-                        onChange={handleInputChange}
-                        onKeyPress={handleKeyPress}
-                        onPaste={handlePaste}
-                        maxLength={6}
-                    />
+                    <div className="action-divider">
+                        <span>OR</span>
+                    </div>
 
                     <button
-                        className="join-button"
-                        onClick={handleJoinClick}
-                        disabled={meetingCode.length !== 6}
+                        className="start-meeting-button"
+                        onClick={handleStartMeeting}
                     >
-                        Join Meeting
+                        Start Instant Meeting
                     </button>
+
+                    <div className="join-section">
+                        <input
+                            type="text"
+                            className="meeting-input"
+                            placeholder="Enter Host ID to Join"
+                            value={meetingCode}
+                            onChange={handleInputChange}
+                            onKeyPress={handleKeyPress}
+                            onPaste={handlePaste}
+                            maxLength={6}
+                        />
+
+                        <button
+                            className="join-button"
+                            onClick={handleJoinClick}
+                            disabled={meetingCode.length !== 6}
+                        >
+                            Join Meeting
+                        </button>
+                    </div>
 
                     <div className="service-status">
                         <span className="status-dot"></span>
