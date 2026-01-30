@@ -20,10 +20,19 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const localStreamRef = useRef(null)
     const peerInstance = useRef(null)
     const callInstance = useRef(null)
+    const connInstance = useRef(null) // NEW: Data Connection Ref
 
     // Handle hand sign detection from ML model
     const handleHandSignDetected = (signText) => {
+        // 1. Show locally
         setTranscript(`✋ ${signText}`);
+
+        // 2. Send to remote peer if connected
+        if (connInstance.current && connInstance.current.open) {
+            console.log("Sending transcript:", signText);
+            connInstance.current.send({ type: 'transcript', text: signText });
+        }
+
         setTimeout(() => {
             setTranscript('');
         }, 5000);
@@ -55,6 +64,8 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     // If we are joining someone else (meetingId !== userId), call them
                     if (meetingId && meetingId !== userId) {
                         setConnectionStatus("CONNECTING...");
+
+                        // A. Call for Video
                         const call = peer.call(meetingId, stream);
                         callInstance.current = call;
 
@@ -65,14 +76,16 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                             setConnectionStatus(""); // Connected
                         });
 
-                        call.on('error', (err) => {
-                            console.error("Call error:", err);
-                            setConnectionStatus("CALL FAILED");
+                        // B. Connect for Data (Subtitles)
+                        const conn = peer.connect(meetingId);
+                        conn.on('open', () => {
+                            console.log("Data connection opened!");
+                            connInstance.current = conn;
                         });
                     }
                 });
 
-                // Answer Incoming Calls
+                // Answer Incoming Calls (Video)
                 peer.on('call', (call) => {
                     call.answer(stream); // Answer with our stream
                     callInstance.current = call;
@@ -82,6 +95,23 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                             remoteVideoRef.current.srcObject = remoteStream;
                         }
                         setConnectionStatus(""); // Connected
+                    });
+                });
+
+                // Handle Incoming Data Connection (Subtitles)
+                peer.on('connection', (conn) => {
+                    console.log("Incoming data connection...");
+                    conn.on('open', () => {
+                        console.log("Data connection established!");
+                        connInstance.current = conn;
+                    });
+
+                    conn.on('data', (data) => {
+                        console.log("Received data:", data);
+                        if (data.type === 'transcript') {
+                            setTranscript(`🗣️ ${data.text}`); // Distinct icon for remote
+                            setTimeout(() => setTranscript(''), 5000);
+                        }
                     });
                 });
 
