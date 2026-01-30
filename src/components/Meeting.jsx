@@ -23,26 +23,29 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const connInstance = useRef(null)
 
     // Handle hand sign detection (Voice or Hand)
-    const handleHandSignDetected = (signText) => {
-        console.log("🤟 Sign Detected:", signText);
+    const handleHandSignDetected = (signText, source = 'hand') => {
+        console.log(`🤟 Sign Detected (${source}):`, signText);
 
-        // 1. TRIGGER AVATAR ANIMATION (Fixes "Avatar not moving")
-        setDetectedSign(signText);
+        // 1. TRIGGER AVATAR ANIMATION (ONLY IF SOURCE IS VOICE)
+        // User Request: "avatar to hear the audio and not text"
+        if (source === 'voice') {
+            setDetectedSign(signText);
+        }
 
         // 2. SHOW SUBTITLE LOCALLY
-        setTranscript(`✋ ${signText}`);
+        setTranscript(`${source === 'voice' ? '🎤' : '✋'} ${signText}`);
         setIsCaptionsOn(true); // Auto-enable captions
 
-        // 3. SEND TO REMOTE PEER (Subtitle Sync)
+        // 3. SEND TO REMOTE PEER (Subtitle Sync + Avatar Sync)
         if (connInstance.current && connInstance.current.open) {
             console.log("Sending transcript:", signText);
-            connInstance.current.send({ type: 'transcript', text: signText });
+            connInstance.current.send({ type: 'transcript', text: signText, source: source });
         }
 
         // Reset state after 5 seconds
         setTimeout(() => {
             setTranscript('');
-            setDetectedSign(null); // Stop avatar animation
+            if (source === 'voice') setDetectedSign(null); // Stop avatar only if it was started
         }, 5000);
     };
 
@@ -62,12 +65,25 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 const command = event.results[last][0].transcript.trim().toLowerCase();
                 console.log("🎤 Voice Command:", command);
 
-                // KEYWORD MATCHING
+                // KEYWORD MATCHING (6 Words Support)
                 if (command.includes("hello") || command.includes("hi")) {
-                    handleHandSignDetected("Hello");
+                    handleHandSignDetected("Hello", 'voice');
                 }
                 else if (command.includes("thank") || command.includes("thanks")) {
-                    handleHandSignDetected("Thank You");
+                    handleHandSignDetected("Thank You", 'voice');
+                }
+                else if (command.includes("welcome")) {
+                    handleHandSignDetected("Welcome", 'voice');
+                }
+                else if (command.includes("our")) {
+                    handleHandSignDetected("Our", 'voice');
+                }
+                else if (command.includes("team")) {
+                    handleHandSignDetected("Team", 'voice');
+                }
+                else if (command.includes("to") || command.includes("too") || command.includes("two")) {
+                    // "to" is hard to catch alone, added generic homophones
+                    handleHandSignDetected("To", 'voice');
                 }
             };
 
@@ -159,16 +175,18 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     conn.on('data', (data) => {
                         console.log("Received data:", data);
                         if (data.type === 'transcript') {
-                            setTranscript(`🗣️ ${data.text}`);
+                            setTranscript(`${data.source === 'voice' ? '🗣️' : '✋'} ${data.text}`);
                             setIsCaptionsOn(true); // Auto-show
 
-                            // TRIGGER AVATAR ANIMATION FOR REMOTE SIGN
-                            setDetectedSign(data.text);
+                            // TRIGGER AVATAR ANIMATION ONLY IF SOURCE WAS VOICE (Synced Logic)
+                            if (data.source === 'voice') {
+                                setDetectedSign(data.text);
+                            }
 
                             // Reset after 5 seconds
                             setTimeout(() => {
                                 setTranscript('');
-                                setDetectedSign(null);
+                                if (data.source === 'voice') setDetectedSign(null);
                             }, 5000);
                         }
                     });

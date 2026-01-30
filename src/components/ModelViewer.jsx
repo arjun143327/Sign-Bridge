@@ -183,6 +183,10 @@ export default function ModelViewer({
     const signModelMap = {
         'Thank You': '/ISL_thankyou.glb',
         'Hello': '/ISL_hello2.glb',
+        'Welcome': '/ISL_welcome.glb',
+        'Our': '/ISL_our2.glb',
+        'Team': '/ISL_team2.glb',
+        'To': '/ISL_to.glb'
     };
     const activeModelPath = (currentSign && signModelMap[currentSign]) ? signModelMap[currentSign] : modelPath;
 
@@ -334,6 +338,10 @@ export default function ModelViewer({
         useGLTF.preload(activeModelPath);
         useGLTF.preload('/ISL_thankyou.glb');
         useGLTF.preload('/ISL_hello2.glb');
+        useGLTF.preload('/ISL_welcome.glb');
+        useGLTF.preload('/ISL_our2.glb');
+        useGLTF.preload('/ISL_team2.glb');
+        useGLTF.preload('/ISL_to.glb');
     }, [activeModelPath]);
 
 
