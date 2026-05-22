@@ -101,8 +101,14 @@ ISC
 
 **Arjun**
 - GitHub: [@arjun143327](https://github.com/arjun143327)
+**yeshwanthikka**
+- Github: [@yeshwanthikka](https://github.com/yeshwanthikka)
+**Sibin S Koshy**
+- GitHub: [@arjun143327](https://github.com/)
+**Harish GG**
+- GitHub: [@Harishgg7](https://github.com/Harishgg7)
 
-## 🤝 Contributing
+
 
 Contributions, issues, and feature requests are welcome!
 
