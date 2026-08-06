@@ -41,8 +41,8 @@ export class ISLClassifier {
 
         activation.dispose();
 
-        // Return result if confidence is high enough
-        if (result.confidences[result.label] > 0.8) {
+        // Return result if confidence is high enough (lowered threshold for better detection)
+        if (result.confidences[result.label] > 0.6) {
             return {
                 label: result.label,
                 confidence: result.confidences[result.label]
@@ -72,12 +72,27 @@ export class ISLClassifier {
     load(datasetStr) {
         if (!datasetStr) return;
 
-        const datasetObj = JSON.parse(datasetStr);
-        const dataset = {};
-        Object.keys(datasetObj).forEach((key) => {
-            dataset[key] = tf.tensor(datasetObj[key], [datasetObj[key].length / 126, 126]);
-        });
-        this.classifier.setClassifierDataset(dataset);
+        try {
+            const datasetObj = JSON.parse(datasetStr);
+            const dataset = {};
+            Object.keys(datasetObj).forEach((key) => {
+                const flatData = datasetObj[key];
+                if (Array.isArray(flatData) && flatData.length > 0 && flatData.length % 126 === 0) {
+                    dataset[key] = tf.tensor(flatData, [flatData.length / 126, 126]);
+                    console.log(`[ISLClassifier] Loaded class "${key}" with ${flatData.length / 126} examples`);
+                } else {
+                    console.warn(`[ISLClassifier] Skipping class "${key}": invalid data format (length: ${flatData?.length}, expected multiple of 126)`);
+                }
+            });
+            if (Object.keys(dataset).length > 0) {
+                this.classifier.setClassifierDataset(dataset);
+                console.log('[ISLClassifier] Model loaded successfully, classes:', Object.keys(dataset));
+            } else {
+                console.warn('[ISLClassifier] No valid classes found in model data');
+            }
+        } catch (e) {
+            console.error('[ISLClassifier] Failed to load model:', e);
+        }
     }
 
     // Clear all training data

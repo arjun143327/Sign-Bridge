@@ -122,20 +122,28 @@ export default function ModelViewer({
         const load = () => {
             const saved = localStorage.getItem('isl-model');
             if (saved) {
-                classifier.load(saved);
-                setRecogStatus("Ready (Custom Model Loaded)");
-                setTrainingCounts(classifier.getExampleCounts());
-                console.log("Loaded Custom Model from LocalStorage");
+                try {
+                    classifier.load(saved);
+                    setRecogStatus("Ready (Custom Model Loaded)");
+                    setTrainingCounts(classifier.getExampleCounts());
+                    console.log("Loaded Custom Model from LocalStorage", classifier.getExampleCounts());
+                } catch (e) {
+                    console.error("Failed to load custom model", e);
+                }
             }
             else if (preTrainedModel) {
                 try {
+                    // preTrainedModel is already a JSON object, need to stringify for load()
                     classifier.load(JSON.stringify(preTrainedModel));
                     setRecogStatus("Ready (Standard Model Loaded)");
                     setTrainingCounts(classifier.getExampleCounts());
-                    console.log("Loaded Bundled Model from JSON");
+                    console.log("Loaded Bundled Model from JSON", classifier.getExampleCounts());
                 } catch (e) {
                     console.error("Failed to load bundled model", e);
+                    setRecogStatus("No Model - Train to enable detection");
                 }
+            } else {
+                setRecogStatus("No Model - Train to enable detection");
             }
         };
         load();
@@ -169,6 +177,13 @@ export default function ModelViewer({
     const canvasRef = useRef(null);
     const handsRef = useRef(null);
     const cameraRef = useRef(null);
+
+    // NEW: Temporal Smoothing & Cooldown Refs
+    const predictionBuffer = useRef([]);
+    const lastDetectionTime = useRef(0);
+    const COOLDOWN_MS = 1000; // 1.0 seconds cooldown between signs
+    const BUFFER_SIZE = 4; // Require 4 consecutive frames of the same sign
+    const CONFIDENCE_THRESHOLD = 0.70; // Require 70% confidence minimum
 
     // REFS FOR STATE ACCESS INSIDE CALLBACKS
     const isTrainingRef = useRef(isTraining);
@@ -284,6 +299,7 @@ export default function ModelViewer({
             let frameData = new Array(126).fill(0);
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                setHandDetected(true);
                 const landmarks = results.multiHandLandmarks[0];
 
                 // USE GLOBAL DRAWING UTILS
@@ -318,14 +334,52 @@ export default function ModelViewer({
                     setRecogStatus(`Training... ${_activeLabel}`);
 
                 } else if (!_isTraining) {
-                    const result = await classifier.predict(frameData);
-                    if (result) {
-                        const confidencePct = (result.confidence * 100).toFixed(0);
-                        setDetectedText(result.label);
-                        setRecogStatus(`Detected: ${result.label} (${confidencePct}%)`);
-                        if (onHandSignDetected) {
-                            onHandSignDetected(result.label);
+                    const numClasses = classifier.classifier.getNumClasses();
+                    // console.log(`[DEBUG] Predicting... Classes loaded: ${numClasses}`);
+                    if (numClasses > 0) {
+                        // 1. Check Cooldown
+                        if (Date.now() - lastDetectionTime.current < COOLDOWN_MS) {
+                            return; // Ignore frames while in cooldown
                         }
+
+                        const result = await classifier.predict(frameData);
+                        
+                        // 2. Temporal Smoothing & Confidence Check
+                        if (result && result.confidence >= CONFIDENCE_THRESHOLD) {
+                            predictionBuffer.current.push(result.label);
+                            
+                            // Keep buffer at fixed size
+                            if (predictionBuffer.current.length > BUFFER_SIZE) {
+                                predictionBuffer.current.shift();
+                            }
+
+                            // Check if buffer is full and ALL predictions are identical
+                            if (predictionBuffer.current.length === BUFFER_SIZE) {
+                                const allSame = predictionBuffer.current.every(label => label === result.label);
+                                
+                                if (allSame) {
+                                    // Valid sign detected!
+                                    const confidencePct = (result.confidence * 100).toFixed(0);
+                                    setDetectedText(result.label);
+                                    setRecogStatus(`Detected: ${result.label} (${confidencePct}%)`);
+                                    console.log(`[DEBUG] Sign detected (Stabilized): ${result.label} (${confidencePct}%)`);
+                                    
+                                    if (onHandSignDetected) {
+                                        onHandSignDetected(result.label);
+                                    }
+
+                                    // Trigger cooldown and clear buffer
+                                    lastDetectionTime.current = Date.now();
+                                    predictionBuffer.current = [];
+                                }
+                            }
+                        } else {
+                            // If confidence drops or result is null, reset buffer
+                            // This ensures we need N *consecutive* high-confidence frames
+                            predictionBuffer.current = [];
+                        }
+                    } else {
+                        setRecogStatus("No model loaded - Train signs first");
                     }
                 }
             } else {
@@ -386,9 +440,9 @@ export default function ModelViewer({
                         <button
                             className="mode-toggle"
                             onClick={() => setIsTraining(!isTraining)}
-                            style={{ marginLeft: '10px', padding: '4px 8px', fontSize: '10px', background: isTraining ? '#ff4081' : '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                            style={{ marginLeft: '10px', padding: '4px 8px', fontSize: '10px', background: isTraining ? '#ff4081' : '#00e676', color: isTraining ? 'white' : 'black', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}
                         >
-                            {isTraining ? 'OPN: TRAIN' : 'OPN: PREDICT'}
+                            {isTraining ? 'OPN: TRAIN' : 'AI Active'}
                         </button>
                     </div>
                     <button className="close-button" onClick={onClose}>
