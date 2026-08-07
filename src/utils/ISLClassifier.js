@@ -98,7 +98,7 @@ export class ISLClassifier {
         const maxProb = Math.max(...probabilities);
         const labelIndex = probabilities.indexOf(maxProb);
         
-        if (maxProb > 0.70) {
+        if (maxProb > 0.30) {
             return {
                 label: this.classes[labelIndex],
                 confidence: maxProb
@@ -128,14 +128,40 @@ export class ISLClassifier {
             if (datasetObj.xs && datasetObj.ys && datasetObj.xs.length > 0) {
                 this.xs = datasetObj.xs;
                 this.ys = datasetObj.ys;
+            } else {
+                // Support legacy isl_model.json format: {"Hello": [flat_array], "Welcome": [flat_array]}
+                this.xs = [];
+                this.ys = [];
+                const SEQUENCE_LENGTH = TIME_STEPS * FEATURES;
                 
-                // Rebuild example counts
-                this.exampleCounts = {};
-                this.ys.forEach(idx => {
-                    const label = this.classes[idx];
-                    this.exampleCounts[label] = (this.exampleCounts[label] || 0) + 1;
-                });
-                
+                for (const [label, flatArray] of Object.entries(datasetObj)) {
+                    if (!this.classes.includes(label)) this.classes.push(label);
+                    const labelIndex = this.classes.indexOf(label);
+                    
+                    for (let i = 0; i < flatArray.length; i += SEQUENCE_LENGTH) {
+                        const flatSeq = flatArray.slice(i, i + SEQUENCE_LENGTH);
+                        if (flatSeq.length === SEQUENCE_LENGTH) {
+                            const sequence = [];
+                            for (let t = 0; t < TIME_STEPS; t++) {
+                                sequence.push(flatSeq.slice(t * FEATURES, (t + 1) * FEATURES));
+                            }
+                            this.xs.push(sequence);
+                            this.ys.push(labelIndex);
+                        }
+                    }
+                }
+                // Update final model architecture to support any newly discovered classes
+                this.model = this.buildModel(); 
+            }
+            
+            // Rebuild example counts
+            this.exampleCounts = {};
+            this.ys.forEach(idx => {
+                const label = this.classes[idx];
+                this.exampleCounts[label] = (this.exampleCounts[label] || 0) + 1;
+            });
+            
+            if (this.xs.length > 0) {
                 console.log(`[ISLClassifier] Loaded dataset with ${this.xs.length} sequences. Training...`);
                 await this.train();
                 console.log('[ISLClassifier] Model trained successfully from loaded data.');
@@ -150,5 +176,18 @@ export class ISLClassifier {
         this.ys = [];
         this.exampleCounts = {};
         this.model = this.buildModel(); // Reset model weights
+    }
+
+    // Dynamically add a new class to the model
+    addClass(newLabel) {
+        if (!newLabel || this.classes.includes(newLabel)) return false;
+        
+        // Add to classes array
+        this.classes.push(newLabel);
+        
+        // Rebuild the model so the final Dense layer has the new number of classes
+        this.model = this.buildModel();
+        console.log(`[ISLClassifier] Added new class '${newLabel}'. Total classes: ${this.classes.length}`);
+        return true;
     }
 }

@@ -10,6 +10,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const [isCaptionsOn, setIsCaptionsOn] = useState(false)
     const [transcript, setTranscript] = useState('')
     const [isModelViewerOpen, setIsModelViewerOpen] = useState(false)
+    const [isParticipantsOpen, setIsParticipantsOpen] = useState(false)
     const [currentModelPath, setCurrentModelPath] = useState('/ISL_hello2.glb')
     const [detectedSign, setDetectedSign] = useState(null)
     const [peerId, setPeerId] = useState('')
@@ -32,24 +33,18 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const handleHandSignDetected = (signText, source = 'hand') => {
         console.log(`🤟 Sign Detected (${source}):`, signText);
 
-        if (source === 'voice') {
-            // 1. TRIGGER AVATAR ANIMATION (ONLY IF SOURCE IS VOICE)
+        if (source === 'avatar-only') {
+            // 1. TRIGGER AVATAR ANIMATION (Independent of subtitles)
             setDetectedSign(signText);
 
-            // 2. SHOW SUBTITLE LOCALLY
-            setTranscript(`🎤 ${signText}`);
-            setIsCaptionsOn(true); // Auto-enable captions
-
-            // 3. SEND TO REMOTE PEER (Subtitle Sync + Avatar Sync)
+            // 2. SEND AVATAR TRIGGER TO REMOTE PEER
             if (connInstance.current && connInstance.current.open) {
-                console.log("Sending transcript:", signText);
-                connInstance.current.send({ type: 'transcript', text: signText, source: source });
+                connInstance.current.send({ type: 'avatar-trigger', sign: signText });
             }
 
-            // Reset state after 5 seconds - only clear transcript, keep captions on
+            // Reset avatar after 5 seconds
             setTimeout(() => {
-                setTranscript('');
-                setDetectedSign(null); // Stop avatar only if it was started
+                setDetectedSign(null);
             }, 5000);
         } else {
             // --- SENTENCE ACCUMULATION FOR HAND SIGNS ---
@@ -71,6 +66,15 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 // Sentence is complete!
                 const finalSentence = signBufferRef.current.join(' ');
                 
+                // --- TRIGGER TEXT-TO-SPEECH ---
+                // We use the browser's built-in TTS to speak the finished sentence out loud!
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(finalSentence);
+                    utterance.rate = 0.9; // Speak slightly slower for clarity
+                    utterance.pitch = 1.0;
+                    window.speechSynthesis.speak(utterance);
+                }
+
                 // Clear buffer for the next sentence
                 signBufferRef.current = [];
                 
@@ -101,94 +105,132 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // --- VOICE RECOGNITION SETUP ---
+    // --- VOICE RECOGNITION SETUP (DEEPGRAM) ---
     useEffect(() => {
-        // Simple Native Speech Recognition (Supported in Chrome/Edge)
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!isMicOn) return;
 
-        if (SpeechRecognition) {
-            const recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true; // CHANGED: Enable fast detection
-            recognition.lang = 'en-US';
+        let socket;
+        let mediaRecorder;
+        let audioStream;
+        let isCancelled = false;
 
-            // DEBOUNCE LOGIC (Prevent spamming the same sign)
-            let lastDetectedTime = 0;
-            const COOLDOWN_MS = 2000;
+        const startDeepgram = async () => {
+            try {
+                // Request a specific audio stream for STT
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                if (isCancelled) {
+                    audioStream.getTracks().forEach(track => track.stop());
+                    return;
+                }
 
-            recognition.onresult = (event) => {
-                const results = Array.from(event.results);
-                // Check ALL results (interim and final) for keywords
-                const transcript = results
-                    .map(result => result[0].transcript)
-                    .join(' ')
-                    .toLowerCase();
+                // Deepgram websocket URL (interim_results=true gets words as they are spoken)
+                socket = new WebSocket('wss://api.deepgram.com/v1/listen?interim_results=true&punctuate=true', [
+                    'token',
+                    '72d718751ee0b77c3149e32f63c6e40fb6a7a6ca'
+                ]);
 
-                // Get the very last piece of text spoken
-                const latestFragment = results[results.length - 1][0].transcript.toLowerCase();
+                let lastDetectedTime = 0;
+                const COOLDOWN_MS = 2000;
 
-                console.log("🎤 Voice Stream:", latestFragment);
-
-                const now = Date.now();
-                if (now - lastDetectedTime < COOLDOWN_MS) return;
-
-                const keywords = [
-                    { word: 'hello', sign: 'Hello' },
-                    { word: 'hi', sign: 'Hello' },
-                    { word: 'thank', sign: 'Thank You' },
-                    { word: 'thanks', sign: 'Thank You' },
-                    { word: 'welcome', sign: 'Welcome' },
-                    { word: 'our', sign: 'Our' },
-                    { word: 'team', sign: 'Team' },
-                    { word: 'to', sign: 'To' },
-                    { word: 'two', sign: 'To' },
-                    { word: 'too', sign: 'To' },
-                    { word: 'sorry', sign: 'Sorry' },
-                    { word: 'yes', sign: 'Yes' },
-                    { word: 'no', sign: 'No' }
-                ];
-
-                for (const k of keywords) {
-                    if (latestFragment.includes(k.word)) {
-                        console.log(`✅ MATCHED: ${k.word} -> ${k.sign}`);
-                        handleHandSignDetected(k.sign, 'voice');
-                        lastDetectedTime = now;
-                        break; // Trigger only one sign per checking window
+                socket.onopen = () => {
+                    if (isCancelled) {
+                        socket.close();
+                        return;
                     }
-                }
-            };
+                    console.log("🟢 Deepgram WebSocket Connected");
+                    // Most browsers support audio/webm. For broader support, you could omit mimeType 
+                    // and let the browser pick, but webm is heavily optimized for Deepgram.
+                    mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+                    
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        if (event.data.size > 0 && socket.readyState === 1) {
+                            socket.send(event.data);
+                        }
+                    });
+                    mediaRecorder.start(250); // Send audio chunks every 250ms
+                };
 
-            recognition.onerror = (event) => {
-                console.warn("Speech recognition error", event.error);
-            };
+                socket.onmessage = (message) => {
+                    const received = JSON.parse(message.data);
+                    
+                    // Deepgram JSON structure safely accessed
+                    const transcript = received?.channel?.alternatives?.[0]?.transcript;
 
-            recognition.onend = () => {
-                // Auto-restart if it stops (as long as Mic is supposedly On)
-                if (isMicOn) {
-                    try {
-                        recognition.start();
-                        console.log("🎤 Speech Recognition restarted");
-                    } catch (e) {
-                        // ignore if already started
+                    if (transcript) {
+                        const latestText = transcript.trim();
+                        
+                        // ALWAYS DISPLAY SPEECH-TO-TEXT LOCALLY
+                        setTranscript(`🗣️ ${latestText}`);
+                        setIsCaptionsOn(true);
+                        
+                        // ALWAYS SEND RAW SPEECH TO REMOTE PEER
+                        if (connInstance.current && connInstance.current.open) {
+                            connInstance.current.send({ type: 'transcript', text: latestText, source: 'voice' });
+                        }
+
+                        // Debounce clearing of subtitles (wait 4 seconds of silence before hiding)
+                        if (activeSpeakerTimeoutRef.current) clearTimeout(activeSpeakerTimeoutRef.current);
+                        activeSpeakerTimeoutRef.current = setTimeout(() => setTranscript(''), 4000);
+
+                        const now = Date.now();
+                        if (now - lastDetectedTime < COOLDOWN_MS) return;
+
+                        const latestFragment = latestText.toLowerCase();
+                        const keywords = [
+                            { word: 'hello', sign: 'Hello' },
+                            { word: 'hi', sign: 'Hello' },
+                            { word: 'thank', sign: 'Thank You' },
+                            { word: 'thanks', sign: 'Thank You' },
+                            { word: 'welcome', sign: 'Welcome' },
+                            { word: 'our', sign: 'Our' },
+                            { word: 'team', sign: 'Team' },
+                            { word: 'to', sign: 'To' },
+                            { word: 'two', sign: 'To' },
+                            { word: 'too', sign: 'To' },
+                            { word: 'sorry', sign: 'Sorry' },
+                            { word: 'yes', sign: 'Yes' },
+                            { word: 'no', sign: 'No' }
+                        ];
+
+                        for (const k of keywords) {
+                            if (latestFragment.includes(k.word)) {
+                                console.log(`✅ MATCHED KEYWORD: ${k.word} -> ${k.sign}`);
+                                handleHandSignDetected(k.sign, 'avatar-only');
+                                lastDetectedTime = now;
+                                break; 
+                            }
+                        }
                     }
-                }
-            };
+                };
 
-            // Auto-start if mic is on
-            if (isMicOn) {
-                try {
-                    recognition.start();
-                } catch (e) {
-                    // Ignore if already started
-                }
+                socket.onclose = () => {
+                    console.log("🔴 Deepgram WebSocket Closed");
+                };
+                
+                socket.onerror = (error) => {
+                    console.error("Deepgram Error:", error);
+                };
+
+            } catch (err) {
+                console.error("Deepgram initialization failed:", err);
             }
+        };
 
-            return () => {
-                recognition.onend = null; // Prevent restart loop on unmount
-                recognition.stop();
-            };
-        }
-    }, [isMicOn]); // Re-bind if Mic toggles
+        startDeepgram();
+
+        return () => {
+            isCancelled = true;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            if (socket) {
+                socket.close();
+            }
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+            }
+        };    }, [isMicOn]); // Re-bind if Mic toggles
 
     // 1. Initialize PeerJS & Local Stream
     useEffect(() => {
@@ -238,17 +280,15 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                         conn.on('data', (data) => {
                             console.log("Caller received data:", data);
                             if (data.type === 'transcript') {
-                                setTranscript(`${data.source === 'voice' ? '🗣️' : '✋'} ${data.text}`);
+                                setTranscript(`${data.source === 'hand' ? '✋' : '🗣️'} ${data.text}`);
                                 setIsCaptionsOn(true);
-
-                                if (data.source === 'voice') {
-                                    setDetectedSign(data.text);
-                                }
 
                                 setTimeout(() => {
                                     setTranscript('');
-                                    if (data.source === 'voice') setDetectedSign(null);
                                 }, 5000);
+                            } else if (data.type === 'avatar-trigger') {
+                                setDetectedSign(data.sign);
+                                setTimeout(() => setDetectedSign(null), 5000);
                             }
                         });
                     }
@@ -277,13 +317,8 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     conn.on('data', (data) => {
                         console.log("Received data:", data);
                         if (data.type === 'transcript') {
-                            setTranscript(`${data.source === 'voice' ? '🗣️' : '✋'} ${data.text}`);
+                            setTranscript(`${data.source === 'hand' ? '✋' : '🗣️'} ${data.text}`);
                             setIsCaptionsOn(true); // Auto-show
-
-                            // TRIGGER AVATAR ANIMATION ONLY IF SOURCE WAS VOICE (Synced Logic)
-                            if (data.source === 'voice') {
-                                setDetectedSign(data.text);
-                            }
 
                             // Active Speaker Indicator
                             setRemoteActiveSpeaker(true);
@@ -295,8 +330,10 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                             // Reset after 5 seconds
                             setTimeout(() => {
                                 setTranscript('');
-                                if (data.source === 'voice') setDetectedSign(null);
                             }, 5000);
+                        } else if (data.type === 'avatar-trigger') {
+                            setDetectedSign(data.sign);
+                            setTimeout(() => setDetectedSign(null), 5000);
                         }
                     });
                 });
@@ -329,25 +366,30 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     }, [userId, meetingId]);
 
     // Toggle Camera
-    const toggleCamera = () => {
-        if (localStreamRef.current) {
-            const videoTrack = localStreamRef.current.getVideoTracks()[0];
-            if (videoTrack) {
-                videoTrack.enabled = !videoTrack.enabled;
-                setIsCameraOn(videoTrack.enabled);
+    const toggleMic = () => {
+        setIsMicOn(prev => {
+            const newState = !prev;
+            if (localStreamRef.current) {
+                localStreamRef.current.getAudioTracks().forEach(track => {
+                    track.enabled = newState;
+                });
             }
-        }
+            return newState;
+        });
     };
 
-    // Toggle Mic
-    const toggleMic = () => {
-        if (localStreamRef.current) {
-            const audioTrack = localStreamRef.current.getAudioTracks()[0];
-            if (audioTrack) {
-                audioTrack.enabled = !audioTrack.enabled;
-                setIsMicOn(audioTrack.enabled);
+    // Toggle Camera
+    const toggleCamera = () => {
+        setIsCameraOn(prev => {
+            const newState = !prev;
+            if (localStreamRef.current) {
+                const videoTrack = localStreamRef.current.getVideoTracks()[0];
+                if (videoTrack) {
+                    videoTrack.enabled = newState;
+                }
             }
-        }
+            return newState;
+        });
     };
 
     // Toggle Screen Share
@@ -392,6 +434,11 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
         // Don't clear transcript when toggling captions off - just hide/show
     };
 
+    const copyMeetingId = () => {
+        navigator.clipboard.writeText(meetingId);
+        alert(`Meeting ID "${meetingId}" copied to clipboard!`);
+    };
+
     const handleEndCall = () => {
         onLeaveMeeting();
     };
@@ -409,10 +456,38 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                         </div>
                     )}
                 </div>
-                <div className="header-right">
-                    <div className="participant-count">
+                <div className="header-right" style={{ position: 'relative' }}>
+                    <button 
+                        className="participant-count" 
+                        onClick={() => setIsParticipantsOpen(!isParticipantsOpen)}
+                        style={{ cursor: 'pointer', background: isParticipantsOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: '16px', fontSize: '14px', fontWeight: 'bold' }}
+                    >
                         👥 {peerId && connectionStatus === "" ? 2 : 1}
-                    </div>
+                    </button>
+                    
+                    {/* PARTICIPANTS POPOVER */}
+                    {isParticipantsOpen && (
+                        <div className="participants-popover" style={{
+                            position: 'absolute', top: '110%', right: '0', background: '#1e1e1e', 
+                            border: '1px solid #333', borderRadius: '8px', padding: '12px', width: '220px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 100, textAlign: 'left'
+                        }}>
+                            <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#aaa' }}>Participants</h4>
+                            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 12px 0', fontSize: '14px' }}>
+                                <li style={{ marginBottom: '6px', color: 'white' }}>👤 You (Host)</li>
+                                {peerId && connectionStatus === "" && (
+                                    <li style={{ color: 'white' }}>👤 Remote User</li>
+                                )}
+                            </ul>
+                            <div style={{ borderTop: '1px solid #333', margin: '8px 0' }}></div>
+                            <button 
+                                onClick={copyMeetingId}
+                                style={{ width: '100%', padding: '8px', background: '#0052cc', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                            >
+                                📋 Copy Meeting ID
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 

@@ -1,4 +1,4 @@
-import React, { Suspense, useRef, useEffect, useState, useCallback } from 'react';
+import React, { Suspense, useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF, Environment, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -110,6 +110,7 @@ export default function ModelViewer({
     const [trainingState, setTrainingState] = useState('idle'); // 'idle' | 'countdown' | 'capturing'
     const [countdown, setCountdown] = useState(3);
     const [activeLabel, setActiveLabel] = useState(null);
+    const [newSignName, setNewSignName] = useState(""); // State for dynamically adding signs
 
     // AI State
     const [recogStatus, setRecogStatus] = useState("Initializing...");
@@ -120,18 +121,7 @@ export default function ModelViewer({
     // LOAD MODEL ON STARTUP
     useEffect(() => {
         const load = () => {
-            const saved = localStorage.getItem('isl-model');
-            if (saved) {
-                try {
-                    classifier.load(saved);
-                    setRecogStatus("Ready (Custom Model Loaded)");
-                    setTrainingCounts(classifier.getExampleCounts());
-                    console.log("Loaded Custom Model from LocalStorage", classifier.getExampleCounts());
-                } catch (e) {
-                    console.error("Failed to load custom model", e);
-                }
-            }
-            else if (preTrainedModel) {
+            if (preTrainedModel) {
                 try {
                     // preTrainedModel is already a JSON object, need to stringify for load()
                     classifier.load(JSON.stringify(preTrainedModel));
@@ -196,8 +186,8 @@ export default function ModelViewer({
     const lastDetectionTime = useRef(0);
     const predictionBufferRef = useRef([]);
     const COOLDOWN_MS = 1000; 
-    const BUFFER_SIZE = 3; // Require 3 consecutive identical predictions
-    const CONFIDENCE_THRESHOLD = 0.85; // Increased threshold to ignore transitional hand movements
+    const BUFFER_SIZE = 2; // Reduced from 3 to 2 for faster response
+    const CONFIDENCE_THRESHOLD = 0.65; // Reduced from 0.85 to make it much more forgiving
 
     // REFS FOR STATE ACCESS INSIDE CALLBACKS
     const isTrainingRef = useRef(isTraining);
@@ -223,7 +213,6 @@ export default function ModelViewer({
     // 1. Initialize AI Model
     useEffect(() => {
         const initAI = async () => {
-            if (!isOpen) return;
             if (recogStatus.includes("Ready")) return;
 
             try {
@@ -252,7 +241,7 @@ export default function ModelViewer({
 
     // 2. Setup Camera & MediaPipe (Auto-Start when Ready)
     useEffect(() => {
-        if (!isOpen || !isCameraReady || !webcamRef.current || !webcamRef.current.video) return;
+        if (!isCameraReady || !webcamRef.current || !webcamRef.current.video) return;
 
         console.log('🔹 [DEBUG] Starting MediaPipe (Auto-Start)');
 
@@ -390,9 +379,6 @@ export default function ModelViewer({
                                         predictionBufferRef.current = [];
                                     }
                                 }
-                            } else {
-                                // If confidence drops or is null, clear the smoothing buffer
-                                predictionBufferRef.current = [];
                             }
                         }
                     } else {
@@ -446,10 +432,13 @@ export default function ModelViewer({
         );
     };
 
-    if (!isOpen) return null;
+    // if (!isOpen) return null; // REMOVED: Prevent WebGL unmount destruction
 
     return (
-        <div className={`model-viewer-overlay ${!isOpen ? 'hidden' : ''}`}>
+        <div 
+            className={`model-viewer-overlay ${!isOpen ? 'hidden' : ''}`}
+            style={!isOpen ? { position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none' } : {}}
+        >
             <div className="ai-translator-card">
                 {/* Header */}
                 <div className="card-header">
@@ -470,14 +459,42 @@ export default function ModelViewer({
                     </button>
                 </div>
 
-                {isTraining ? (
-                    /* TRAINING UI */
-                    <div className="training-panel" style={{ padding: '15px', color: 'white', textAlign: 'center', height: '300px', overflowY: 'auto', position: 'relative' }}>
+                {/* TRAINING UI */}
+                <div className="training-panel" style={{ 
+                    display: isTraining ? 'block' : 'none', 
+                    padding: '15px', color: 'white', textAlign: 'center', height: '300px', overflowY: 'auto', position: 'relative' 
+                }}>
 
                         {/* COUNTDOWN OVERLAY */}
                         {renderTrainingOverlay()}
 
                         <h3 style={{ margin: '0 0 10px 0', fontSize: '14px' }}>TRAIN MODE (Click to Start 3s Timer)</h3>
+                        
+                        {/* NEW: Add Sign Input */}
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '15px', justifyContent: 'center' }}>
+                            <input 
+                                type="text" 
+                                value={newSignName} 
+                                onChange={(e) => setNewSignName(e.target.value)} 
+                                placeholder="Enter new sign name..." 
+                                style={{ padding: '8px', borderRadius: '4px', border: 'none', width: '60%', outline: 'none' }}
+                            />
+                            <button 
+                                onClick={() => {
+                                    if (newSignName.trim() && classifier.addClass(newSignName.trim())) {
+                                        setNewSignName(""); // clear input
+                                    } else if (!newSignName.trim()) {
+                                        alert("Please enter a sign name.");
+                                    } else {
+                                        alert("Sign already exists!");
+                                    }
+                                }}
+                                style={{ padding: '8px 12px', background: '#00e676', border: 'none', borderRadius: '4px', color: 'black', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                                + Add Sign
+                            </button>
+                        </div>
+
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                             {classifier.classes.map(label => (
                                 <button
@@ -552,29 +569,33 @@ export default function ModelViewer({
                             </button>
                         </div>
                     </div>
-                ) : (
-                    /* PREDICTION UI (Avatar) */
-                    <div className="avatar-container">
-                        <div className="avatar-circle">
-                            {loadError ? (
-                                <div className="avatar-error"><p>Failed to load</p></div>
-                            ) : (
-                                <Canvas camera={{ position: [0, 0, 4], fov: 45 }} onError={() => setLoadError('Canvas Error')}>
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                        <ambientLight intensity={0.8} />
-                                        <directionalLight position={[2, 2, 5]} intensity={1.5} />
-                                        <AvatarModel modelPath={activeModelPath} currentSign={currentSign} />
-                                        <Environment preset="city" />
-                                    </Suspense>
-                                </Canvas>
-                            )}
-                        </div>
-                        <div className="avatar-shadow"></div>
-                        <div style={{ textAlign: 'center', marginTop: '10px', color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>
-                            {recogStatus}
-                        </div>
+
+                {/* PREDICTION UI (Avatar) */}
+                <div className="avatar-container" style={{ 
+                    position: isTraining ? 'absolute' : 'relative',
+                    left: isTraining ? '-9999px' : 'auto',
+                    opacity: isTraining ? 0 : 1,
+                    pointerEvents: isTraining ? 'none' : 'auto'
+                }}>
+                    <div className="avatar-circle">
+                        {loadError ? (
+                            <div className="avatar-error"><p>Failed to load</p></div>
+                        ) : (
+                            <Canvas camera={{ position: [0, 0, 4], fov: 45 }} onError={(e) => { console.error(e); setLoadError('Canvas Error'); }}>
+                                <Suspense fallback={<LoadingSpinner />}>
+                                    <ambientLight intensity={0.8} />
+                                    <directionalLight position={[2, 2, 5]} intensity={1.5} />
+                                    <AvatarModel modelPath={activeModelPath} currentSign={currentSign} />
+                                    <Environment preset="city" />
+                                </Suspense>
+                            </Canvas>
+                        )}
                     </div>
-                )}
+                    <div className="avatar-shadow"></div>
+                    <div style={{ textAlign: 'center', marginTop: '10px', color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>
+                        {recogStatus}
+                    </div>
+                </div>
 
                 {/* WEBCAM (Always Mounted for Detection, Visible only in Training) */}
                 <div style={{
