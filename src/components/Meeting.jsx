@@ -141,8 +141,11 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     { word: 'our', sign: 'Our' },
                     { word: 'team', sign: 'Team' },
                     { word: 'to', sign: 'To' },
-                    { word: 'two', sign: 'To' }, // Homophone
-                    { word: 'too', sign: 'To' }  // Homophone
+                    { word: 'two', sign: 'To' },
+                    { word: 'too', sign: 'To' },
+                    { word: 'sorry', sign: 'Sorry' },
+                    { word: 'yes', sign: 'Yes' },
+                    { word: 'no', sign: 'No' }
                 ];
 
                 for (const k of keywords) {

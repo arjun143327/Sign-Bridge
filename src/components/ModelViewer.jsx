@@ -164,10 +164,20 @@ export default function ModelViewer({
             if (count === 0) {
                 clearInterval(timer);
                 setTrainingState('capturing');
-                setTimeout(() => {
+                setTimeout(async () => {
+                    setTrainingState('training_network');
+                    setRecogStatus("Training Neural Network... Please Wait!");
+                    
+                    try {
+                        await classifier.train();
+                        setRecogStatus("Training Complete!");
+                    } catch (e) {
+                        console.error(e);
+                        setRecogStatus("Training Failed");
+                    }
+                    
                     setTrainingState('idle');
                     setActiveLabel(null);
-                    setRecogStatus("Training Complete!");
                 }, 3000);
             }
         }, 1000);
@@ -178,12 +188,16 @@ export default function ModelViewer({
     const handsRef = useRef(null);
     const cameraRef = useRef(null);
 
-    // NEW: Temporal Smoothing & Cooldown Refs
-    const predictionBuffer = useRef([]);
+    // NEW: Temporal Sequence Buffer (1D CNN)
+    const TIME_STEPS = 20;
+    const frameSequenceRef = useRef([]);
+
+    // Cooldown & Smoothing Refs
     const lastDetectionTime = useRef(0);
-    const COOLDOWN_MS = 1000; // 1.0 seconds cooldown between signs
-    const BUFFER_SIZE = 4; // Require 4 consecutive frames of the same sign
-    const CONFIDENCE_THRESHOLD = 0.70; // Require 70% confidence minimum
+    const predictionBufferRef = useRef([]);
+    const COOLDOWN_MS = 1000; 
+    const BUFFER_SIZE = 3; // Require 3 consecutive identical predictions
+    const CONFIDENCE_THRESHOLD = 0.85; // Increased threshold to ignore transitional hand movements
 
     // REFS FOR STATE ACCESS INSIDE CALLBACKS
     const isTrainingRef = useRef(isTraining);
@@ -266,16 +280,11 @@ export default function ModelViewer({
         hands.onResults(onResults);
         handsRef.current = hands;
 
-        let lastFrameTime = 0;
         // USE GLOBAL WINDOW.CAMERA
         const camera = new window.Camera(videoElement, {
             onFrame: async () => {
-                const now = Date.now();
-                if (now - lastFrameTime >= 100) {
-                    lastFrameTime = now;
-                    if (webcamRef.current && webcamRef.current.video) {
-                        await hands.send({ image: webcamRef.current.video });
-                    }
+                if (webcamRef.current && webcamRef.current.video) {
+                    await hands.send({ image: webcamRef.current.video });
                 }
             },
             width: 640,
@@ -312,71 +321,79 @@ export default function ModelViewer({
                 const offset = isRight ? 63 : 0;
 
                 for (let i = 0; i < landmarks.length; i++) {
-                    const x = landmarks[i].x - wrist.x;
-                    const y = landmarks[i].y - wrist.y;
-                    const z = landmarks[i].z - wrist.z;
+                    // Round to 4 decimal places to massively reduce JSON storage size (prevents QuotaExceededError)
+                    const x = Number((landmarks[i].x - wrist.x).toFixed(4));
+                    const y = Number((landmarks[i].y - wrist.y).toFixed(4));
+                    const z = Number((landmarks[i].z - wrist.z).toFixed(4));
                     frameData[offset + i * 3] = x;
                     frameData[offset + i * 3 + 1] = y;
                     frameData[offset + i * 3 + 2] = z;
                 }
 
-                // 3. KNN Logic - Train or Predict
+                // Add to temporal sequence buffer
+                frameSequenceRef.current.push(frameData);
+                if (frameSequenceRef.current.length > TIME_STEPS) {
+                    frameSequenceRef.current.shift();
+                }
+
+                // 3. Neural Network Logic - Train or Predict
                 const _isTraining = isTrainingRef.current;
                 const _trainingState = trainingStateRef.current;
                 const _activeLabel = activeLabelRef.current;
 
                 if (_isTraining && _trainingState === 'capturing' && _activeLabel) {
-                    classifier.addExample(frameData, _activeLabel);
-                    setTrainingCounts(prev => ({
-                        ...prev,
-                        [_activeLabel]: (prev[_activeLabel] || 0) + 1
-                    }));
-                    setRecogStatus(`Training... ${_activeLabel}`);
+                    if (frameSequenceRef.current.length === TIME_STEPS) {
+                        classifier.addExample([...frameSequenceRef.current], _activeLabel);
+                        setTrainingCounts(prev => ({
+                            ...prev,
+                            [_activeLabel]: (prev[_activeLabel] || 0) + 1
+                        }));
+                        setRecogStatus(`Capturing Sequences... ${_activeLabel}`);
+                    }
 
                 } else if (!_isTraining) {
-                    const numClasses = classifier.classifier.getNumClasses();
-                    // console.log(`[DEBUG] Predicting... Classes loaded: ${numClasses}`);
-                    if (numClasses > 0) {
+                    // Check if model has classes (training data exists)
+                    if (Object.keys(classifier.getExampleCounts()).length > 0) {
                         // 1. Check Cooldown
                         if (Date.now() - lastDetectionTime.current < COOLDOWN_MS) {
                             return; // Ignore frames while in cooldown
                         }
 
-                        const result = await classifier.predict(frameData);
-                        
-                        // 2. Temporal Smoothing & Confidence Check
-                        if (result && result.confidence >= CONFIDENCE_THRESHOLD) {
-                            predictionBuffer.current.push(result.label);
+                        // 2. Predict on full temporal sequence
+                        if (frameSequenceRef.current.length === TIME_STEPS) {
+                            const result = await classifier.predict(frameSequenceRef.current);
                             
-                            // Keep buffer at fixed size
-                            if (predictionBuffer.current.length > BUFFER_SIZE) {
-                                predictionBuffer.current.shift();
-                            }
-
-                            // Check if buffer is full and ALL predictions are identical
-                            if (predictionBuffer.current.length === BUFFER_SIZE) {
-                                const allSame = predictionBuffer.current.every(label => label === result.label);
+                            if (result && result.confidence >= CONFIDENCE_THRESHOLD) {
+                                predictionBufferRef.current.push(result.label);
                                 
-                                if (allSame) {
-                                    // Valid sign detected!
-                                    const confidencePct = (result.confidence * 100).toFixed(0);
-                                    setDetectedText(result.label);
-                                    setRecogStatus(`Detected: ${result.label} (${confidencePct}%)`);
-                                    console.log(`[DEBUG] Sign detected (Stabilized): ${result.label} (${confidencePct}%)`);
-                                    
-                                    if (onHandSignDetected) {
-                                        onHandSignDetected(result.label);
-                                    }
-
-                                    // Trigger cooldown and clear buffer
-                                    lastDetectionTime.current = Date.now();
-                                    predictionBuffer.current = [];
+                                if (predictionBufferRef.current.length > BUFFER_SIZE) {
+                                    predictionBufferRef.current.shift();
                                 }
+
+                                if (predictionBufferRef.current.length === BUFFER_SIZE) {
+                                    const allSame = predictionBufferRef.current.every(label => label === result.label);
+                                    
+                                    if (allSame) {
+                                        // Valid sign detected!
+                                        const confidencePct = (result.confidence * 100).toFixed(0);
+                                        setDetectedText(result.label);
+                                        setRecogStatus(`Detected: ${result.label} (${confidencePct}%)`);
+                                        console.log(`[DEBUG] Sign detected (1D CNN): ${result.label} (${confidencePct}%)`);
+                                        
+                                        if (onHandSignDetected) {
+                                            onHandSignDetected(result.label);
+                                        }
+
+                                        // Trigger cooldown and clear buffers
+                                        lastDetectionTime.current = Date.now();
+                                        frameSequenceRef.current = [];
+                                        predictionBufferRef.current = [];
+                                    }
+                                }
+                            } else {
+                                // If confidence drops or is null, clear the smoothing buffer
+                                predictionBufferRef.current = [];
                             }
-                        } else {
-                            // If confidence drops or result is null, reset buffer
-                            // This ensures we need N *consecutive* high-confidence frames
-                            predictionBuffer.current = [];
                         }
                     } else {
                         setRecogStatus("No model loaded - Train signs first");
@@ -384,6 +401,9 @@ export default function ModelViewer({
                 }
             } else {
                 setHandDetected(false);
+                // We removed the immediate buffer clear here. MediaPipe sometimes drops a frame,
+                // and clearing the buffer entirely destroys the sequence collection. 
+                // Because we run at 30fps now, the old frames will flush out in < 0.6 seconds anyway.
             }
         }
     };
@@ -488,8 +508,17 @@ export default function ModelViewer({
                         <div style={{ marginTop: '15px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
                             <button
                                 onClick={() => {
-                                    localStorage.setItem('isl-model', classifier.save());
-                                    alert('Model Saved to Browser!');
+                                    try {
+                                        localStorage.setItem('isl-model', classifier.save());
+                                        alert('Model Saved to Browser!');
+                                    } catch (e) {
+                                        console.error("Save error", e);
+                                        if (e.name === 'QuotaExceededError') {
+                                            alert("Browser Storage limit reached! Try clearing old data or use the Download button instead.");
+                                        } else {
+                                            alert("Failed to save model: " + e.message);
+                                        }
+                                    }
                                 }}
                                 style={{ padding: '8px 16px', background: '#2196f3', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
                             >
