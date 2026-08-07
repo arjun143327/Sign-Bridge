@@ -118,27 +118,7 @@ export default function ModelViewer({
     const [handDetected, setHandDetected] = useState(false);
     const [isCameraReady, setIsCameraReady] = useState(false);
 
-    // LOAD MODEL ON STARTUP
-    useEffect(() => {
-        const load = () => {
-            if (preTrainedModel) {
-                try {
-                    // preTrainedModel is already a JSON object, need to stringify for load()
-                    classifier.load(JSON.stringify(preTrainedModel));
-                    setRecogStatus("Ready (Standard Model Loaded)");
-                    setTrainingCounts(classifier.getExampleCounts());
-                    console.log("Loaded Bundled Model from JSON", classifier.getExampleCounts());
-                } catch (e) {
-                    console.error("Failed to load bundled model", e);
-                    setRecogStatus("No Model - Train to enable detection");
-                }
-            } else {
-                setRecogStatus("No Model - Train to enable detection");
-            }
-        };
-        load();
-    }, []);
-
+    // We will initialize the AI entirely inside a single robust useEffect down below.
     // HANDS-FREE TRAINING FUNCTION
     const startTrainingSession = (label) => {
         if (trainingState !== 'idle') return;
@@ -181,13 +161,17 @@ export default function ModelViewer({
     // NEW: Temporal Sequence Buffer (1D CNN)
     const TIME_STEPS = 20;
     const frameSequenceRef = useRef([]);
+    const frameCounterRef = useRef(0); // Used to throttle AI inference and fix lag
 
     // Cooldown & Smoothing Refs
     const lastDetectionTime = useRef(0);
+    const lastDetectedSignRef = useRef(null);
     const predictionBufferRef = useRef([]);
-    const COOLDOWN_MS = 1000; 
-    const BUFFER_SIZE = 2; // Reduced from 3 to 2 for faster response
-    const CONFIDENCE_THRESHOLD = 0.65; // Reduced from 0.85 to make it much more forgiving
+    const COOLDOWN_MS = 300; // Extremely fast global cooldown
+    const SAME_SIGN_COOLDOWN_MS = 2000; // Prevent spamming the exact same sign
+    const VOTING_WINDOW = 5; // Keep last 5 predictions
+    const VOTING_THRESHOLD = 4; // Require 4/5 consensus to filter out chaotic transition frames
+    const CONFIDENCE_THRESHOLD = 0.70; // Lower confidence allowed because voting provides the stability
 
     // REFS FOR STATE ACCESS INSIDE CALLBACKS
     const isTrainingRef = useRef(isTraining);
@@ -210,10 +194,10 @@ export default function ModelViewer({
     };
     const activeModelPath = (currentSign && signModelMap[currentSign]) ? signModelMap[currentSign] : modelPath;
 
-    // 1. Initialize AI Model
+    // 1. Initialize AI Model & Load Data
     useEffect(() => {
         const initAI = async () => {
-            if (recogStatus.includes("Ready")) return;
+            if (!isOpen) return;
 
             try {
                 setRecogStatus("Initializing TensorFlow...");
@@ -226,9 +210,24 @@ export default function ModelViewer({
                 }
                 console.log(`✅ TFJS Backend: ${tf.getBackend()}`);
 
-                if (localStorage.getItem('isl-model')) {
-                    setRecogStatus("Loading Custom Model...");
-                } else {
+                // Priority 1: Check localStorage first (User's custom training)
+                const localModel = localStorage.getItem('isl-model');
+                if (localModel) {
+                    setRecogStatus("Loading Custom Model... Training network...");
+                    await classifier.load(localModel);
+                    setTrainingCounts(classifier.getExampleCounts());
+                    setRecogStatus("Ready (Custom Model Loaded)");
+                    console.log("Loaded Custom Model from LocalStorage", classifier.getExampleCounts());
+                } 
+                // Priority 2: Fallback to bundled JSON file
+                else if (preTrainedModel && Object.keys(preTrainedModel).length > 0) {
+                    setRecogStatus("Loading Bundled Model... Training network...");
+                    await classifier.load(JSON.stringify(preTrainedModel));
+                    setTrainingCounts(classifier.getExampleCounts());
+                    setRecogStatus("Ready (Standard Model Loaded)");
+                    console.log("Loaded Bundled Model from JSON", classifier.getExampleCounts());
+                } 
+                else {
                     setRecogStatus("System Ready (No Model Trained)");
                 }
             } catch (error) {
@@ -237,7 +236,7 @@ export default function ModelViewer({
             }
         };
         initAI();
-    }, [isOpen]);
+    }, [isOpen, classifier]);
 
     // 2. Setup Camera & MediaPipe (Auto-Start when Ready)
     useEffect(() => {
@@ -324,6 +323,7 @@ export default function ModelViewer({
                 if (frameSequenceRef.current.length > TIME_STEPS) {
                     frameSequenceRef.current.shift();
                 }
+                frameCounterRef.current += 1;
 
                 // 3. Neural Network Logic - Train or Predict
                 const _isTraining = isTrainingRef.current;
@@ -350,32 +350,59 @@ export default function ModelViewer({
 
                         // 2. Predict on full temporal sequence
                         if (frameSequenceRef.current.length === TIME_STEPS) {
+                            // THROTTLE INFERENCE: Predict every 2nd frame (15 FPS) for responsive but light CPU usage
+                            if (frameCounterRef.current % 2 !== 0) return;
+
                             const result = await classifier.predict(frameSequenceRef.current);
                             
+                            // 3. VOTING CONSENSUS FILTER
                             if (result && result.confidence >= CONFIDENCE_THRESHOLD) {
                                 predictionBufferRef.current.push(result.label);
+                            } else {
+                                // Push a 'null' if confidence is too low to break false consensus
+                                predictionBufferRef.current.push("null");
+                            }
+
+                            if (predictionBufferRef.current.length > VOTING_WINDOW) {
+                                predictionBufferRef.current.shift();
+                            }
+
+                            if (predictionBufferRef.current.length === VOTING_WINDOW) {
+                                // Count frequencies of predictions
+                                const counts = {};
+                                predictionBufferRef.current.forEach(label => {
+                                    counts[label] = (counts[label] || 0) + 1;
+                                });
                                 
-                                if (predictionBufferRef.current.length > BUFFER_SIZE) {
-                                    predictionBufferRef.current.shift();
+                                // Find the most frequent label
+                                let maxLabel = null;
+                                let maxCount = 0;
+                                for (const [label, count] of Object.entries(counts)) {
+                                    if (count > maxCount && label !== "null") {
+                                        maxCount = count;
+                                        maxLabel = label;
+                                    }
                                 }
 
-                                if (predictionBufferRef.current.length === BUFFER_SIZE) {
-                                    const allSame = predictionBufferRef.current.every(label => label === result.label);
-                                    
-                                    if (allSame) {
-                                        // Valid sign detected!
-                                        const confidencePct = (result.confidence * 100).toFixed(0);
-                                        setDetectedText(result.label);
-                                        setRecogStatus(`Detected: ${result.label} (${confidencePct}%)`);
-                                        console.log(`[DEBUG] Sign detected (1D CNN): ${result.label} (${confidencePct}%)`);
+                                // If the dominant sign reaches consensus (e.g. 4 out of 5 frames)
+                                if (maxCount >= VOTING_THRESHOLD) {
+                                    const now = Date.now();
+                                    // Fire if it's a NEW sign, or if 2 seconds passed for the SAME sign
+                                    if (maxLabel !== lastDetectedSignRef.current || (now - lastDetectionTime.current > SAME_SIGN_COOLDOWN_MS)) {
+                                        
+                                        setDetectedText(maxLabel);
+                                        setRecogStatus(`Detected: ${maxLabel} (Consensus)`);
+                                        console.log(`[DEBUG] Sign detected (Voting): ${maxLabel} (${maxCount}/${VOTING_WINDOW})`);
                                         
                                         if (onHandSignDetected) {
-                                            onHandSignDetected(result.label);
+                                            onHandSignDetected(maxLabel);
                                         }
 
-                                        // Trigger cooldown and clear buffers
-                                        lastDetectionTime.current = Date.now();
-                                        frameSequenceRef.current = [];
+                                        // Update refs
+                                        lastDetectionTime.current = now;
+                                        lastDetectedSignRef.current = maxLabel;
+                                        
+                                        // Clear only the voting buffer to prevent double-fire, keep frames intact!
                                         predictionBufferRef.current = [];
                                     }
                                 }

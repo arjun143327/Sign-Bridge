@@ -127,7 +127,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 // Deepgram websocket URL (interim_results=true gets words as they are spoken)
                 socket = new WebSocket('wss://api.deepgram.com/v1/listen?interim_results=true&punctuate=true', [
                     'token',
-                    '72d718751ee0b77c3149e32f63c6e40fb6a7a6ca'
+                    import.meta.env.VITE_DEEPGRAM_API_KEY
                 ]);
 
                 let lastDetectedTime = 0;
