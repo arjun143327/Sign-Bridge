@@ -64,6 +64,14 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                 setDetectedSign(null);
             }, 5000);
         } else {
+            // --- TRIGGER AVATAR TO MIRROR LOCAL HAND SIGN ---
+            setDetectedSign(signText);
+            
+            // Reset avatar after 5 seconds so they can repeat the same sign
+            setTimeout(() => {
+                setDetectedSign(null);
+            }, 5000);
+            
             // --- SENTENCE ACCUMULATION FOR HAND SIGNS ---
             signBufferRef.current.push(signText);
             const currentSentence = signBufferRef.current.join(' ');
@@ -560,6 +568,7 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                     onToggleCaptions={toggleCaptions}
                     transcript={transcript}
                     onHandSignDetected={handleHandSignDetected}
+                    videoElementRef={localVideoRef}
                 />
             </div>
 

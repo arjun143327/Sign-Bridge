@@ -108,7 +108,8 @@ export default function ModelViewer({
     isCaptionsOn,
     onToggleCaptions,
     transcript,
-    onHandSignDetected // NEW: callback to send detected sign to Meeting component
+    onHandSignDetected, // NEW: callback to send detected sign to Meeting component
+    videoElementRef // NEW: Receive the shared WebRTC video stream to prevent hardware locks
 }) {
     // 1. Initialize Classifier
     const [classifier] = useState(new ISLClassifier());
@@ -163,10 +164,10 @@ export default function ModelViewer({
         }, 1000);
     };
 
-    const webcamRef = useRef(null);
     const canvasRef = useRef(null);
+    const webcamRef = useRef(null);
     const handsRef = useRef(null);
-    const cameraRef = useRef(null);
+    const loopRef = useRef(null);
 
     // NEW: Temporal Sequence Buffer (1D CNN)
     const TIME_STEPS = 20;
@@ -199,7 +200,11 @@ export default function ModelViewer({
         'Welcome': '/ISL_welcome.glb',
         'Our': '/ISL_our2.glb',
         'Team': '/ISL_team2.glb',
-        'To': '/ISL_to.glb'
+        'To': '/ISL_to.glb',
+        'Is': '/ISL_IS.glb',
+        'Sign': '/ISL_SIGN(POSE).glb',
+        'This': '/ISL_THIS.glb',
+        'Indian': '/ISL_indian.glb'
     };
     const activeModelPath = (currentSign && signModelMap[currentSign]) ? signModelMap[currentSign] : modelPath;
 
@@ -247,20 +252,25 @@ export default function ModelViewer({
         initAI();
     }, [isOpen, classifier]);
 
-    // 2. Setup Camera & MediaPipe (Auto-Start when Ready)
+    // 2. Setup Camera & MediaPipe (Piggyback on Shared Stream)
     useEffect(() => {
-        if (!isCameraReady || !webcamRef.current || !webcamRef.current.video) return;
+        if (!isOpen || !videoElementRef || !videoElementRef.current) return;
 
-        console.log('🔹 [DEBUG] Starting MediaPipe (Auto-Start)');
+        console.log('🔹 [DEBUG] Starting MediaPipe (Shared Stream)');
 
         // Wait for Global Scripts to Load
-        if (!window.Hands || !window.Camera) {
+        if (!window.Hands) {
             console.warn("MediaPipe globals not found! Retrying in 1s...");
-            setTimeout(() => setIsCameraReady(true), 1000); // Hacky retry
+            setTimeout(() => setIsCameraReady(!isCameraReady), 1000); // Hacky retry
             return;
         }
 
-        const videoElement = webcamRef.current.video;
+        const video = videoElementRef.current;
+
+        // NEW: Pipe the shared stream to our local training view
+        if (webcamRef.current && video.srcObject) {
+            webcamRef.current.srcObject = video.srcObject;
+        }
 
         // USA GLOBAL WINDOW.HANDS
         const hands = new window.Hands({
@@ -277,24 +287,22 @@ export default function ModelViewer({
         hands.onResults(onResults);
         handsRef.current = hands;
 
-        // USE GLOBAL WINDOW.CAMERA
-        const camera = new window.Camera(videoElement, {
-            onFrame: async () => {
-                if (webcamRef.current && webcamRef.current.video) {
-                    await hands.send({ image: webcamRef.current.video });
-                }
-            },
-            width: 640,
-            height: 480,
-        });
-        camera.start();
-        cameraRef.current = camera;
+        // Custom frame processor to avoid multiple getUserMedia calls!
+        const processFrame = async () => {
+            if (video && video.readyState >= 2 && video.videoWidth > 0 && handsRef.current) {
+                await handsRef.current.send({ image: video });
+            }
+            loopRef.current = requestAnimationFrame(processFrame);
+        };
+        
+        loopRef.current = requestAnimationFrame(processFrame);
+        setIsCameraReady(true);
 
         return () => {
-            if (cameraRef.current) cameraRef.current.stop();
+            if (loopRef.current) cancelAnimationFrame(loopRef.current);
             if (handsRef.current) handsRef.current.close();
         };
-    }, [isOpen, isCameraReady]);
+    }, [isOpen, videoElementRef]);
 
     // 3. Data Collection Loop
     const onResults = async (results) => {
@@ -652,17 +660,11 @@ export default function ModelViewer({
                     opacity: isTraining ? 1 : 0,
                     transition: 'all 0.3s ease'
                 }}>
-                    <Webcam
+                    <video
                         ref={webcamRef}
-                        width={320} // Width of card content
-                        height={240}
-                        mirrored={false}
-                        onUserMedia={() => {
-                            console.log("📷 Webcam Ready!");
-                            setIsCameraReady(true);
-                        }}
-                        onUserMediaError={(e) => console.error("Webcam Error:", e)}
-                        videoConstraints={{ width: 640, height: 480, facingMode: "user" }}
+                        autoPlay
+                        playsInline
+                        muted
                         style={{ width: '100%', height: 'auto', display: 'block' }}
                     />
                     <canvas ref={canvasRef} width={640} height={480} style={{ display: 'none' }} />

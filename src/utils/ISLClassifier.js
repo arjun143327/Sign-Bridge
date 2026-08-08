@@ -6,7 +6,8 @@ const FEATURES = 126;
 export class ISLClassifier {
     constructor() {
         this.classes = [
-            'Hello', 'Welcome', 'Yes', 'No', 'Thank You', 'Sorry', 'To', 'Our', 'Team'
+            'Hello', 'Welcome', 'Yes', 'No', 'Thank You', 'Sorry', 'To', 'Our', 'Team',
+            'Sign', 'This', 'Indian', 'Is'
         ];
         this.xs = [];
         this.ys = [];
@@ -116,6 +117,7 @@ export class ISLClassifier {
         // We save the dataset instead of the model because in-browser CNNs forget old classes if retrained on new ones without the full dataset.
         // Returning the dataset string lets us recreate and train the model instantly on load.
         return JSON.stringify({
+            classes: this.classes,
             xs: this.xs,
             ys: this.ys
         });
@@ -125,9 +127,26 @@ export class ISLClassifier {
         if (!datasetStr) return;
         try {
             const datasetObj = JSON.parse(datasetStr);
+            
+            // 1. Safely restore classes if they exist in the JSON
+            if (datasetObj.classes && Array.isArray(datasetObj.classes)) {
+                this.classes = datasetObj.classes;
+                this.model = this.buildModel(); // Rebuild with correct output dimensions
+            }
+
             if (datasetObj.xs && datasetObj.ys && datasetObj.xs.length > 0) {
                 this.xs = datasetObj.xs;
                 this.ys = datasetObj.ys;
+                
+                // Safety fix for corrupted datasets where labels exceed classes length
+                let maxIndex = Math.max(...this.ys);
+                while (maxIndex >= this.classes.length) {
+                    this.classes.push(`UnknownSign_${this.classes.length}`);
+                }
+                if (maxIndex >= this.model.outputShape[1]) {
+                    this.model = this.buildModel(); // Rebuild again if we had to add fallback classes
+                }
+
             } else {
                 // Support legacy isl_model.json format: {"Hello": [flat_array], "Welcome": [flat_array]}
                 this.xs = [];
@@ -135,6 +154,7 @@ export class ISLClassifier {
                 const SEQUENCE_LENGTH = TIME_STEPS * FEATURES;
                 
                 for (const [label, flatArray] of Object.entries(datasetObj)) {
+                    if (label === 'classes') continue; // Skip if it's the classes array
                     if (!this.classes.includes(label)) this.classes.push(label);
                     const labelIndex = this.classes.indexOf(label);
                     
@@ -158,7 +178,9 @@ export class ISLClassifier {
             this.exampleCounts = {};
             this.ys.forEach(idx => {
                 const label = this.classes[idx];
-                this.exampleCounts[label] = (this.exampleCounts[label] || 0) + 1;
+                if (label) {
+                    this.exampleCounts[label] = (this.exampleCounts[label] || 0) + 1;
+                }
             });
             
             if (this.xs.length > 0) {
@@ -168,6 +190,7 @@ export class ISLClassifier {
             }
         } catch (e) {
             console.error('[ISLClassifier] Failed to load model:', e);
+            throw e; // Bubble error to UI
         }
     }
 
