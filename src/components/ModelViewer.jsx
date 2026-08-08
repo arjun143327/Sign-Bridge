@@ -170,10 +170,9 @@ export default function ModelViewer({
     const lastDetectedSignRef = useRef(null);
     const predictionBufferRef = useRef([]);
     const COOLDOWN_MS = 300; // Extremely fast global cooldown
-    const SAME_SIGN_COOLDOWN_MS = 2000; // Prevent spamming the exact same sign
     const VOTING_WINDOW = 5; // Keep last 5 predictions
     const VOTING_THRESHOLD = 4; // Require 4/5 consensus to filter out chaotic transition frames
-    const CONFIDENCE_THRESHOLD = 0.70; // Lower confidence allowed because voting provides the stability
+    const CONFIDENCE_THRESHOLD = 0.90; // INCREASED: High threshold to prevent false positives when hand is resting
 
     // REFS FOR STATE ACCESS INSIDE CALLBACKS
     const isTrainingRef = useRef(isTraining);
@@ -389,8 +388,8 @@ export default function ModelViewer({
                                 // If the dominant sign reaches consensus (e.g. 4 out of 5 frames)
                                 if (maxCount >= VOTING_THRESHOLD) {
                                     const now = Date.now();
-                                    // Fire if it's a NEW sign, or if 2 seconds passed for the SAME sign
-                                    if (maxLabel !== lastDetectedSignRef.current || (now - lastDetectionTime.current > SAME_SIGN_COOLDOWN_MS)) {
+                                    // Fire ONLY if it's a NEW sign to prevent looping the same word while holding the pose
+                                    if (maxLabel !== lastDetectedSignRef.current) {
                                         
                                         setDetectedText(maxLabel);
                                         setRecogStatus(`Detected: ${maxLabel} (Consensus)`);
@@ -419,6 +418,11 @@ export default function ModelViewer({
                 // We removed the immediate buffer clear here. MediaPipe sometimes drops a frame,
                 // and clearing the buffer entirely destroys the sequence collection. 
                 // Because we run at 30fps now, the old frames will flush out in < 0.6 seconds anyway.
+                
+                // Allow the user to repeat the same sign if they drop their hand for at least 1 second
+                if (Date.now() - lastDetectionTime.current > 1000) {
+                    lastDetectedSignRef.current = null;
+                }
             }
         }
     };
