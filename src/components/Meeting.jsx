@@ -11,8 +11,25 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
     const [transcript, setTranscript] = useState('')
     const [isModelViewerOpen, setIsModelViewerOpen] = useState(false)
     const [isParticipantsOpen, setIsParticipantsOpen] = useState(false)
-    const [currentModelPath, setCurrentModelPath] = useState('/ISL_hello2.glb')
     const [detectedSign, setDetectedSign] = useState(null)
+    
+    // Derive the correct 3D model file based on the spoken sign
+    const getModelPathForSign = (signText) => {
+        if (!signText) return '/ISL_hello2.glb';
+        const text = signText.toLowerCase();
+        if (text === 'is') return '/ISL_IS.glb';
+        if (text === 'sign') return '/ISL_SIGN(POSE).glb';
+        if (text === 'this') return '/ISL_THIS.glb';
+        if (text === 'indian') return '/ISL_indian.glb';
+        if (text.includes('hello')) return '/ISL_hello2.glb';
+        if (text.includes('thank')) return '/ISL_thankyou.glb';
+        if (text.includes('welcome')) return '/ISL_welcome.glb';
+        if (text.includes('our')) return '/ISL_our2.glb';
+        if (text.includes('team')) return '/ISL_team2.glb';
+        if (text.includes('to')) return '/ISL_to.glb';
+        return '/ISL_hello2.glb'; // Default fallback
+    };
+    const currentModelPath = getModelPathForSign(detectedSign);
     const [peerId, setPeerId] = useState('')
     const [connectionStatus, setConnectionStatus] = useState('Connecting...')
     const [meetingDuration, setMeetingDuration] = useState(0)
@@ -139,9 +156,17 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                         return;
                     }
                     console.log("🟢 Deepgram WebSocket Connected");
-                    // Most browsers support audio/webm. For broader support, you could omit mimeType 
-                    // and let the browser pick, but webm is heavily optimized for Deepgram.
-                    mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+                    
+                    // Cross-browser MediaRecorder fallback (Safari doesn't support audio/webm)
+                    let mimeType = 'audio/webm';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) {
+                        mimeType = 'audio/mp4';
+                        if (!MediaRecorder.isTypeSupported(mimeType)) {
+                            mimeType = ''; // Let browser pick default
+                        }
+                    }
+                    
+                    mediaRecorder = new MediaRecorder(audioStream, mimeType ? { mimeType } : undefined);
                     
                     mediaRecorder.addEventListener('dataavailable', event => {
                         if (event.data.size > 0 && socket.readyState === 1) {
@@ -190,7 +215,11 @@ function Meeting({ meetingId, userId, onLeaveMeeting }) {
                             { word: 'too', sign: 'To' },
                             { word: 'sorry', sign: 'Sorry' },
                             { word: 'yes', sign: 'Yes' },
-                            { word: 'no', sign: 'No' }
+                            { word: 'no', sign: 'No' },
+                            { word: 'indian', sign: 'Indian' },
+                            { word: 'sign', sign: 'Sign' },
+                            { word: 'this', sign: 'This' },
+                            { word: 'is', sign: 'Is' }
                         ];
 
                         for (const k of keywords) {

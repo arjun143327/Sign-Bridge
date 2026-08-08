@@ -68,6 +68,8 @@ function AvatarModel({ modelPath, currentSign }) {
             || animations[0];
         if (clip) {
             const action = mixer.current.clipAction(clip);
+            action.setLoop(THREE.LoopOnce, 1);
+            action.clampWhenFinished = true;
             action.reset().fadeIn(0.5).play();
             mixer.current._actions.forEach(act => { if (act !== action) act.fadeOut(0.5); });
         }
