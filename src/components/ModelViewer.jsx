@@ -62,10 +62,18 @@ function AvatarModel({ modelPath, currentSign }) {
     }, [currentSign]);
 
     const playAnimation = (name) => {
-        if (!mixer.current || !animations) return;
-        const clip = animations.find(anim => anim.name.toLowerCase().includes(name.toLowerCase()))
-            || animations.find(anim => anim.name.toLowerCase().includes('idle'))
-            || animations[0];
+        if (!mixer.current || !animations || animations.length === 0) return;
+        
+        let clip = animations.find(anim => anim.name.toLowerCase().includes(name.toLowerCase()))
+            || animations.find(anim => anim.name.toLowerCase().includes('idle'));
+            
+        // If no named match is found, fallback to the longest animation (the actual movement)
+        if (!clip) {
+            clip = animations.reduce((prev, current) => 
+                (prev.duration > current.duration) ? prev : current
+            );
+        }
+
         if (clip) {
             const action = mixer.current.clipAction(clip);
             action.setLoop(THREE.LoopOnce, 1);
@@ -436,6 +444,10 @@ export default function ModelViewer({
         useGLTF.preload('/ISL_our2.glb');
         useGLTF.preload('/ISL_team2.glb');
         useGLTF.preload('/ISL_to.glb');
+        useGLTF.preload('/ISL_IS.glb');
+        useGLTF.preload('/ISL_SIGN(POSE).glb');
+        useGLTF.preload('/ISL_THIS.glb');
+        useGLTF.preload('/ISL_indian.glb');
     }, [activeModelPath]);
 
 
